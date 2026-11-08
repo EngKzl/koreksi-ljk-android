@@ -4,14 +4,19 @@ import net.pakeng.koreksiljk.omr.Gray
 import net.pakeng.koreksiljk.omr.Omr
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import javax.imageio.ImageIO
 
 /** Uji mesin OMR dengan foto LJK sintetis (miring, diputar, coretan, ganda). */
 class OmrTest {
     private fun load(name: String): Gray {
-        val img = ImageIO.read(javaClass.classLoader!!.getResourceAsStream(name))
-        val px = img.getRGB(0, 0, img.width, img.height, null, 0, img.width)
-        return Gray.fromArgb(img.width, img.height, px)
+        // javax.imageio tidak ada di android.jar saat kompilasi, tapi tersedia di JVM saat uji
+        val io = Class.forName("javax.imageio.ImageIO")
+        val img = io.getMethod("read", java.io.InputStream::class.java).invoke(null, javaClass.classLoader!!.getResourceAsStream(name))!!
+        val c = img.javaClass
+        val w = c.getMethod("getWidth").invoke(img) as Int
+        val h = c.getMethod("getHeight").invoke(img) as Int
+        val px = c.getMethod("getRGB", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+            IntArray::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(img, 0, 0, w, h, null, 0, w) as IntArray
+        return Gray.fromArgb(w, h, px)
     }
 
     private fun check(seed: Int): Int {
