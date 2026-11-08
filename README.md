@@ -9,7 +9,7 @@ Aplikasi Android untuk mengoreksi lembar jawaban (LJK) pilihan ganda A–E dari 
 ## Pembaruan otomatis
 Setiap push ke `main` → GitHub Actions menguji mesin OMR, membangun APK bertanda tangan, dan menerbitkan **GitHub Release**.
 Worker Cloudflare `koreksi-ljk` menyediakan `https://ljk.pak-eng.net/api/android/latest` (info rilis terbaru) dan
-`https://ljk.pak-eng.net/unduh` (APK terbaru). Aplikasi mengecek endpoint itu saat dibuka dan menawarkan pembaruan.
+`https://ljk.pak-eng.net/unduh` (APK terbaru, aset `KoreksiLJK.apk` pada rilis terbaru). Aplikasi mengecek endpoint itu saat dibuka dan menawarkan pembaruan.
 
 ## Kunci tanda tangan
 Secret repo `KEYSTORE_B64` berisi file `release.jks` (base64). Simpan file kunci aslinya baik-baik: tanpa kunci yang sama,

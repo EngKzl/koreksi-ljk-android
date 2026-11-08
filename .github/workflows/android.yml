@@ -46,7 +46,9 @@ jobs:
         run: gradle :app:assembleRelease --stacktrace
 
       - name: Siapkan file
-        run: cp app/build/outputs/apk/release/app-release.apk KoreksiLJK-1.0.${{ github.run_number }}.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk KoreksiLJK-1.0.${{ github.run_number }}.apk
+          cp app/build/outputs/apk/release/app-release.apk KoreksiLJK.apk
 
       - uses: actions/upload-artifact@v4
         with:
@@ -60,5 +62,5 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
         run: |
           printf '%s\n' "${MSG:-Pembaruan}" > notes.txt
-          gh release create "v1.0.${{ github.run_number }}" "KoreksiLJK-1.0.${{ github.run_number }}.apk" \
+          gh release create "v1.0.${{ github.run_number }}" KoreksiLJK.apk \
             --title "Koreksi LJK 1.0.${{ github.run_number }}" --notes-file notes.txt
