@@ -1,0 +1,64 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Siapkan kunci tanda tangan
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > app/release.jks
+            echo "SIGNED=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Secret KEYSTORE_B64 belum diisi — APK ditandatangani kunci debug dan TIDAK dirilis."
+          fi
+
+      - name: Uji mesin OMR
+        run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Build APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+        run: gradle :app:assembleRelease --stacktrace
+
+      - name: Siapkan file
+        run: cp app/build/outputs/apk/release/app-release.apk KoreksiLJK-1.0.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KoreksiLJK-1.0.${{ github.run_number }}
+          path: KoreksiLJK-1.0.${{ github.run_number }}.apk
+
+      - name: Terbitkan rilis
+        if: env.SIGNED == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          printf '%s\n' "${MSG:-Pembaruan}" > notes.txt
+          gh release create "v1.0.${{ github.run_number }}" "KoreksiLJK-1.0.${{ github.run_number }}.apk" \
+            --title "Koreksi LJK 1.0.${{ github.run_number }}" --notes-file notes.txt
