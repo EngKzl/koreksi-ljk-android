@@ -29,11 +29,11 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > app/release.jks
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > app/release.jks; fi
+          if [ -f app/release.jks ]; then
             echo "SIGNED=1" >> "$GITHUB_ENV"
           else
-            echo "::warning::Secret KEYSTORE_B64 belum diisi — APK ditandatangani kunci debug dan TIDAK dirilis."
+            echo "::warning::Kunci tanda tangan tidak ada — APK memakai kunci debug dan TIDAK dirilis."
           fi
 
       - name: Uji mesin OMR

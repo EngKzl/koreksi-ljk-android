@@ -12,5 +12,5 @@ Worker Cloudflare `koreksi-ljk` menyediakan `https://ljk.pak-eng.net/api/android
 `https://ljk.pak-eng.net/unduh` (APK terbaru, aset `KoreksiLJK.apk` pada rilis terbaru). Aplikasi mengecek endpoint itu saat dibuka dan menawarkan pembaruan.
 
 ## Kunci tanda tangan
-Secret repo `KEYSTORE_B64` berisi file `release.jks` (base64). Simpan file kunci aslinya baik-baik: tanpa kunci yang sama,
+File `app/release.jks` (alias `ljk`, kata sandi `koreksiljk`) disimpan di repo atas persetujuan pemilik; secret `KEYSTORE_B64` (opsional) akan menggantikannya. Simpan file kunci aslinya baik-baik: tanpa kunci yang sama,
 versi baru tidak bisa dipasang menimpa versi lama.
