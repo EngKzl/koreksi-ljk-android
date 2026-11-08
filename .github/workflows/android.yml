@@ -35,13 +35,23 @@ jobs:
           fi
 
       - name: Uji mesin OMR
-        run: gradle :app:testDebugUnitTest --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:testDebugUnitTest --console=plain 2>&1 | tee test.log || {
+            grep -hE "^e: |error:|What went wrong|FAILED|AssertionError|seed [0-9]+ q|expected" test.log app/build/test-results/testDebugUnitTest/*.xml 2>/dev/null | head -60 > err.txt
+            python3 -c "import sys,urllib.parse;t=open('err.txt').read().replace('%','%25').replace('\r','').replace('\n','%0A');print('::error title=Uji OMR gagal::'+t[:60000])"
+            exit 1; }
 
       - name: Build APK
         env:
           VERSION_CODE: ${{ github.run_number }}
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
-        run: gradle :app:assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --console=plain 2>&1 | tee build.log || {
+            grep -hE "^e: |error:|What went wrong|Could not|failed" -A2 build.log | head -80 > err.txt
+            python3 -c "t=open('err.txt').read().replace('%','%25').replace('\r','').replace('\n','%0A');print('::error title=Build gagal::'+t[:60000])"
+            exit 1; }
 
       - name: Siapkan file
         run: |
