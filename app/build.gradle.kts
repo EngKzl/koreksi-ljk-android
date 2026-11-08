@@ -23,9 +23,9 @@ android {
         create("release") {
             if (ks.exists()) {
                 storeFile = ks
-                storePassword = System.getenv("KEYSTORE_PASS") ?: "koreksiljk"
+                storePassword = System.getenv("KEYSTORE_PASS")?.takeIf { it.isNotBlank() } ?: "koreksiljk"
                 keyAlias = "ljk"
-                keyPassword = System.getenv("KEYSTORE_PASS") ?: "koreksiljk"
+                keyPassword = System.getenv("KEYSTORE_PASS")?.takeIf { it.isNotBlank() } ?: "koreksiljk"
             }
         }
     }
