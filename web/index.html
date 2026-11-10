@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f5c4d">
+<title>Koreksi LJK</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<style>
+:root{--pri:#0f5c4d;--pri2:#13806b;--bg:#f3f5f4;--card:#fff;--tx:#1d2724;--mut:#66726e;--bd:#dfe5e3;--ok:#1a8f4e;--no:#c8372d;--warn:#d98a00;--info:#2a6fd6;--r:12px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:20;background:var(--pri);color:#fff;padding:10px 14px calc(10px);display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px #0002}
+header h1{font-size:17px;margin:0;font-weight:700;white-space:nowrap}
+header select{flex:1;min-width:0;background:#ffffff1f;color:#fff;border:1px solid #ffffff44;border-radius:8px;padding:7px 8px;font-size:14px}
+header select option{color:#000}
+header button{background:none;border:0;color:#fff;font-size:20px;padding:4px 6px;cursor:pointer}
+main{max-width:980px;margin:0 auto;padding:14px 12px 96px}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:20;background:#fff;border-top:1px solid var(--bd);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;padding:8px 2px 7px;font-size:11.5px;color:var(--mut);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+nav button b{font-size:20px;line-height:1;font-weight:400}
+nav button.on{color:var(--pri);font-weight:700}
+.page{display:none}.page.on{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px}
+h2{font-size:18px;margin:4px 0 12px}h3{font-size:15.5px;margin:0 0 8px}
+.mut{color:var(--mut);font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff;color:var(--tx)}
+textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--bd);background:#fff;color:var(--tx);padding:9px 14px;border-radius:9px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn.big{padding:14px 18px;font-size:16px;flex:1;min-width:150px}
+.btn.red{color:var(--no)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.5}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:700;background:#eef1f0;color:var(--mut)}
+.pill.ok{background:#e3f5ea;color:var(--ok)}.pill.no{background:#fbe6e4;color:var(--no)}.pill.warn{background:#fff2d9;color:#9a6200}.pill.info{background:#e5eefc;color:var(--info)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border-bottom:1px solid var(--bd);padding:6px 7px;text-align:left;white-space:nowrap}
+th{background:#f7f9f8;font-size:12.5px;color:var(--mut);position:sticky;top:0}
+tr.click{cursor:pointer}tr.click:hover{background:#f6faf9}
+.tw{overflow:auto;max-height:70vh;border:1px solid var(--bd);border-radius:10px}
+.keygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:4px;margin-top:6px}
+.keygrid span{font:12px ui-monospace,monospace;background:#f2f5f4;border-radius:6px;padding:3px 0;text-align:center}
+.keygrid span.miss{background:#fbe6e4;color:var(--no)}
+.res{display:flex;gap:12px;align-items:center}
+.res img{width:64px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--bd);background:#eee}
+.res .sc{font-size:26px;font-weight:800;margin-left:auto;text-align:right}
+.ex-card .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.ex-card.act{border-color:var(--pri2);box-shadow:0 0 0 2px #13806b33}
+.modal{position:fixed;inset:0;background:#0007;z-index:50;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:10px}
+.modal.on{display:flex}
+.modal .box{background:#fff;border-radius:14px;max-width:900px;width:100%;padding:14px;margin:auto}
+.det{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px}
+@media(max-width:720px){.det{grid-template-columns:1fr}}
+.det canvas{width:100%;border:1px solid var(--bd);border-radius:8px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:5px;max-height:52vh;overflow:auto}
+.q{border:1px solid var(--bd);border-radius:7px;padding:4px 2px;text-align:center;font-size:12.5px;cursor:pointer;background:#fff}
+.q b{display:block;font-size:15px}
+.q.ok{background:#e3f5ea;border-color:#9fd8b6}.q.no{background:#fbe6e4;border-color:#efb3ad}.q.ganda{background:#ffe3c2;border-color:#f2a650}.q.ragu{outline:2px dashed var(--warn)}.q.kosong{background:#f1f1f1}.q.ovr{box-shadow:inset 0 0 0 2px var(--info)}.q.nk{opacity:.5}
+.pick{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.pick button{min-width:46px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px}
+.stat{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 11px}
+.stat b{display:block;font-size:21px}
+.stat span{font-size:12px;color:var(--mut)}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#1d2724;color:#fff;padding:10px 16px;border-radius:10px;z-index:99;font-size:14px;opacity:0;transition:.25s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.on{opacity:1}
+.sheetwrap{background:#e9eceb;border-radius:10px;padding:10px;overflow:auto}
+.sheetwrap svg{width:100%;height:auto;background:#fff;box-shadow:0 2px 10px #0002;display:block;max-width:640px;margin:auto}
+.hidden{display:none!important}
+.kn{width:168px;height:66px;border:1px solid var(--bd);border-radius:6px;background-size:630px auto;background-position:-210px -177px;background-repeat:no-repeat;background-color:#eee}
+#kelasSel select,#detKelas select{width:auto}
+.prog{height:6px;background:#e5ebe9;border-radius:9px;overflow:hidden;margin:8px 0}.prog i{display:block;height:100%;background:var(--pri2);width:0;transition:.2s}
+.legend span{margin-right:10px;font-size:12.5px}
+.seg{display:flex;border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:#fff;padding:9px;font:inherit;font-weight:600;color:var(--mut);cursor:pointer}
+.seg button.on{background:var(--pri);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <h1>✓ Koreksi LJK</h1>
+  <select id="exSel" title="Ujian aktif"></select>
+  <button id="btnSet" title="Pengaturan">⚙︎</button>
+</header>
+<main>
+  <!-- UJIAN -->
+  <section class="page on" id="p-ujian">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Daftar Ujian</h2><button class="btn pri" id="btnNew">＋ Ujian baru</button></div>
+    <div id="exList"></div>
+    <div class="card hidden" id="exForm">
+      <h3 id="exFormTitle">Ujian baru</h3>
+      <div class="grid2">
+        <div><label>Nama ujian</label><input id="f_nama" placeholder="ASTS Ganjil – kelas XI"></div>
+        <div><label>Mata pelajaran</label><input id="f_mapel" placeholder="B. Indonesia"></div>
+        <div><label>Jumlah soal (1–50)</label><input id="f_n" type="number" min="1" max="50" value="50"></div>
+        <div><label>Jumlah paket soal</label><select id="f_paket"><option value="1">1 paket</option><option value="2">2 paket (A,B)</option><option value="3">3 paket (A–C)</option><option value="4">4 paket (A–D)</option><option value="5">5 paket (A–E)</option></select></div>
+        <div><label>KKTP / batas tuntas</label><input id="f_kktp" type="number" min="0" max="100" value="75"></div>
+      </div>
+      <div id="keyBoxes" style="margin-top:12px"></div>
+      <p class="mut" style="margin:4px 0 10px">Kunci bisa diketik berurutan (mis. <code>ABCDEABCDE…</code> atau <code>1A 2C 3E</code>). Pakai <code>-</code> untuk soal yang tidak dinilai/dianulir. Kunci juga bisa dipindai dari LJK yang diisi guru (menu Koreksi → Pindai kunci).</p>
+      <p class="mut" style="margin:0">Satu ujian = satu mapel dengan satu kunci, bisa dipakai untuk banyak kelas. Kelas dipilih saat mengoreksi.</p>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="btnSave">Simpan ujian</button><button class="btn" id="btnCancel">Batal</button></div>
+    </div>
+  </section>
+
+  <!-- KOREKSI -->
+  <section class="page" id="p-koreksi">
+    <h2>Koreksi</h2>
+    <div class="card">
+      <div class="seg" id="modeSeg"><button data-m="siswa" class="on">Koreksi siswa</button><button data-m="kunci">Pindai kunci</button></div>
+      <p class="mut" id="modeHint" style="margin:10px 0">Foto LJK satu per satu, atau pilih banyak file hasil scan sekaligus. Hasil langsung tersimpan; periksa soal yang ditandai kuning/oranye.</p>
+      <div class="row" id="kelasRow" style="margin-bottom:10px"><b>Kelas:</b> <span id="kelasSel" class="row"></span><span id="paketWrap" class="row"><b>Paket:</b> <select id="paketSel" style="width:auto"></select></span></div>
+      <div class="row">
+        <label class="btn pri big" style="margin:0">📷 Foto LJK<input type="file" id="inCam" accept="image/*" capture="environment" hidden></label>
+        <label class="btn big" style="margin:0">🖼 Pilih file (bisa banyak)<input type="file" id="inFile" accept="image/*" multiple hidden></label>
+      </div>
+      <div class="prog hidden" id="prog"><i></i></div>
+      <p class="mut" style="margin:10px 0 0">Tips: letakkan LJK di permukaan datar dan terang, seluruh lembar (kop sampai tanda tangan) masuk bingkai, hindari bayangan HP.</p>
+    </div>
+    <div id="corrList"></div>
+  </section>
+
+  <!-- REKAP -->
+  <section class="page" id="p-rekap">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Rekap Nilai</h2>
+      <div class="row"><button class="btn pri" id="btnXlsx">⬇ Excel</button><button class="btn red" id="btnClearRes">Hapus hasil</button></div></div>
+    <div class="row" id="rekapKelas" style="margin-bottom:10px"></div>
+    <div class="stats" id="stats"></div>
+    <div class="tw"><table id="rekapTbl"></table></div>
+    <p class="mut">Klik baris untuk melihat LJK, mengisi nama, dan mengoreksi manual. Nilai dihitung ulang otomatis bila kunci diubah.</p>
+  </section>
+
+  <!-- ANALISIS -->
+  <section class="page" id="p-analisis">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Analisis Butir Soal</h2><select id="anPaket" style="width:auto"></select></div>
+    <div class="stats" id="anStats"></div>
+    <div class="legend mut" style="margin-bottom:8px"><span><b>P</b> = tingkat kesukaran (proporsi benar)</span><span><b>D</b> = daya beda (kelompok atas − bawah 27%)</span><span>Pengecoh berfungsi bila dipilih ≥5% siswa</span></div>
+    <div class="tw"><table id="anTbl"></table></div>
+  </section>
+  <p class="mut" style="text-align:center;margin:18px 0 0">© Pak-eng_v__VER__</p>
+</main>
+
+<nav id="nav">
+  <button data-p="ujian" class="on"><b>📋</b>Ujian</button>
+  <button data-p="koreksi"><b>📷</b>Koreksi</button>
+  <button data-p="rekap"><b>📊</b>Rekap</button>
+  <button data-p="analisis"><b>🔎</b>Analisis</button>
+</nav>
+
+<div class="modal" id="mDet"><div class="box">
+  <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0" id="detTitle">Detail</h3><button class="btn sm" data-close>✕ Tutup</button></div>
+  <div class="det">
+    <div><canvas id="detCv"></canvas><div class="legend mut" style="margin-top:4px"><span style="color:var(--ok)">■ benar</span><span style="color:var(--no)">■ salah</span><span style="color:var(--ok)">□ kunci</span><span style="color:var(--warn)">■ ganda/ragu</span></div></div>
+    <div>
+      <label>Nama siswa (lihat tulisan di LJK)</label><input id="detNama" list="detNamaList" autocomplete="off"><datalist id="detNamaList"></datalist>
+      <div class="row" style="margin:8px 0"><b>Kelas:</b> <span id="detKelas" class="row"></span><span id="detPaketWrap" class="row"><b>Paket:</b> <select id="detPaket" style="width:auto"></select></span></div>
+      <div id="detScore" style="margin-bottom:8px"></div>
+      <div class="qgrid" id="detQ"></div>
+      <div id="detPick" class="hidden" style="margin-top:10px;padding:10px;border:1px solid var(--bd);border-radius:10px">
+        <div id="detPickT" style="font-weight:700"></div><div class="mut" id="detPickN"></div>
+        <div class="pick" id="detPickB"></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="detSave">Simpan</button><button class="btn red" id="detDel">Hapus hasil</button></div>
+    </div>
+  </div>
+</div></div>
+
+<div class="modal" id="mSet"><div class="box" style="max-width:560px">
+  <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Pengaturan</h3><button class="btn sm" data-close>✕ Tutup</button></div>
+  <h3>Kepekaan pembacaan</h3>
+  <label>Batas tanda jawaban: <b id="v_tm"></b> <span class="mut">(naikkan bila kotak kosong/kotor terbaca bertanda; turunkan bila tanda tipis tidak terbaca)</span></label><input type="range" id="s_tm" min="0.03" max="0.12" step="0.005">
+  <label style="margin-top:8px">Batas garis coretan (pembatalan): <b id="v_ts"></b> <span class="mut">(naikkan bila silang biasa terbaca dicoret; turunkan bila coretan terbaca sebagai jawaban)</span></label><input type="range" id="s_ts" min="3" max="9" step="0.1">
+  <div class="row" style="margin-top:8px"><button class="btn sm" id="s_reset">Kembalikan default</button></div>
+  <h3 style="margin-top:16px">Cadangan data</h3>
+  <p class="mut" style="margin-top:0">Semua data tersimpan di perangkat ini (bisa dipakai tanpa internet). Buat cadangan berkala atau untuk pindah perangkat.</p>
+  <div class="row"><button class="btn" id="s_backup">⬇ Unduh cadangan</button><label class="btn" style="margin:0">⬆ Pulihkan<input type="file" id="s_restore" accept=".json,application/json" hidden></label></div>
+  <p class="mut" style="margin-top:14px" id="verInfo"></p>
+</div></div>
+
+<div id="toast"></div>
+<script>
+/*__OMR__*/
+/*__XLSX__*/
+/*__APP__*/
+</script>
+</body>
+</html>

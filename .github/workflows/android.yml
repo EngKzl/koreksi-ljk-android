@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK + web
 
 on:
   push:
@@ -53,6 +53,9 @@ jobs:
             python3 -c "t=open('err.txt').read().replace('%','%25').replace('\r','').replace('\n','%0A');print('::error title=Build gagal::'+t[:60000])"
             exit 1; }
 
+      - name: Build web
+        run: node web/build.js 1.0.${{ github.run_number }}
+
       - name: Siapkan file
         run: |
           cp app/build/outputs/apk/release/app-release.apk KoreksiLJK-1.0.${{ github.run_number }}.apk
@@ -70,5 +73,5 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
         run: |
           printf '%s\n' "${MSG:-Pembaruan}" > notes.txt
-          gh release create "v1.0.${{ github.run_number }}" KoreksiLJK.apk \
+          gh release create "v1.0.${{ github.run_number }}" KoreksiLJK.apk web/dist/index.html web/dist/sw.js web/dist/manifest.webmanifest web/dist/icon.svg \
             --title "Koreksi LJK 1.0.${{ github.run_number }}" --notes-file notes.txt

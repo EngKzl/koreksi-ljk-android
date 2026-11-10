@@ -33,12 +33,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.pakeng.koreksiljk.BuildConfig
 import net.pakeng.koreksiljk.data.Store
 import net.pakeng.koreksiljk.data.Updater
 
@@ -69,6 +71,8 @@ fun App(store: Store) {
         containerColor = Bg,
         topBar = { Header(st) },
         bottomBar = {
+            Column(Modifier.background(Color.White)) {
+            Text("© Pak-eng_v${BuildConfig.VERSION_NAME}", color = Mut, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
             NavigationBar(containerColor = Color.White) {
                 listOf("ujian" to "📋\nUjian", "koreksi" to "📷\nKoreksi", "rekap" to "📊\nRekap", "analisis" to "🔎\nAnalisis").forEach { (k, l) ->
                     val (ic, lb) = l.split("\n")
@@ -79,6 +83,7 @@ fun App(store: Store) {
                         label = { Text(lb, fontSize = 11.sp) },
                     )
                 }
+            }
             }
         },
         snackbarHost = { SnackbarHost(snack) },

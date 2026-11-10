@@ -88,7 +88,7 @@ fun SettingsDialog(st: AppState) {
             }
 
             Text("Aplikasi", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp))
-            Text("Versi ${BuildConfig.VERSION_NAME} · pembaruan otomatis dari ljk.pak-eng.net", fontSize = 13.sp, color = Mut)
+            Text("© Pak-eng_v${BuildConfig.VERSION_NAME} · pembaruan otomatis dari ljk.pak-eng.net", fontSize = 13.sp, color = Mut)
             OutlinedButton(enabled = !checking, onClick = {
                 checking = true
                 scope.launch {
