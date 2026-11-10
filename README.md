@@ -2,9 +2,11 @@
 
 Aplikasi Android untuk mengoreksi lembar jawaban (LJK) pilihan ganda A–E dari foto/scan. Dibuat untuk SMKS PGRI 2 Jambi.
 
-- Mesin pembaca LJK (OMR) ditulis sendiri dalam Kotlin, tanpa library pihak ketiga, dan berjalan **offline**.
-- Aturan: jawaban sah = tanda **silang (X)**; batal = tanda **=** di atas silang atau kotak dihitamkan; lebih dari satu silang = **GANDA** (salah).
-- Fitur: ujian & kunci per paket, cetak LJK (PDF), koreksi foto/scan massal, koreksi manual, rekap & Excel, analisis butir (P, D, pengecoh, KR-20), cadangan data (kompatibel dengan versi web).
+- Membaca **LJK asli sekolah** (dua tabel 25 baris × A–E, soal 1–50) langsung dari foto/scan, tanpa penanda khusus.
+- Mesin pembaca (OMR) ditulis sendiri dalam Kotlin, tanpa library pihak ketiga, dan berjalan **offline**.
+- Aturan: jawaban = huruf yang **disilang (X)** atau **dilingkari**; silang yang **dicoret garis mendatar** = dibatalkan; lebih dari satu jawaban = **GANDA** (salah); tanpa jawaban = kosong (salah).
+- Rekap **per kelas** (X/XI/XII · TSM, TKR, DKV, MP, AK, BR · rombel). Nama siswa diisi guru setelah scan.
+- Fitur lain: kunci per paket (ketik atau pindai), koreksi manual per soal, Excel, analisis butir (P, D, pengecoh, KR-20), cadangan data.
 
 ## Pembaruan otomatis
 Setiap push ke `main` → GitHub Actions menguji mesin OMR, membangun APK bertanda tangan, dan menerbitkan **GitHub Release**.

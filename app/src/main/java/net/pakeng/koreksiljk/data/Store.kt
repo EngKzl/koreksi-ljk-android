@@ -11,12 +11,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** Penyimpanan lokal (JSON + folder gambar). Format cadangan sama dengan versi web. */
+/** Penyimpanan lokal (JSON + folder gambar). */
 class Store(private val ctx: Context) {
     val exams = mutableStateListOf<Exam>()
     val results = mutableStateListOf<Res>()
     var activeId by mutableStateOf<String?>(null)
-    var sekolah by mutableStateOf("SMKS PGRI 2 Jambi")
+    /** Kelas yang sedang dikoreksi, mis. "XI AK 2". */
+    var kelas by mutableStateOf("X TSM 1")
     var th by mutableStateOf(Thresholds())
 
     private val dataFile get() = File(ctx.filesDir, "data.json")
@@ -34,8 +35,8 @@ class Store(private val ctx: Context) {
                 o.optJSONArray("exams")?.let { a -> for (i in 0 until a.length()) exams.add(examFrom(a.getJSONObject(i))) }
                 o.optJSONArray("results")?.let { a -> for (i in 0 until a.length()) results.add(resFrom(a.getJSONObject(i))) }
                 activeId = o.optString("active").ifEmpty { null }
-                sekolah = o.optString("sekolah", sekolah)
-                o.optJSONObject("th")?.let { t -> th = Thresholds(t.optDouble("tEmpty", 0.07), t.optDouble("tFull", 0.62), t.optDouble("tStrike", 0.78), t.optDouble("tDiag", 0.42)) }
+                kelas = o.optString("kelas", kelas)
+                o.optJSONObject("th2")?.let { t -> th = Thresholds(t.optDouble("tEmpty", th.tEmpty), t.optDouble("tMark", th.tMark), t.optDouble("tFull", th.tFull), t.optDouble("tStrike", th.tStrike)) }
             } catch (_: Exception) { }
         }
         exams.sortByDescending { it.created }
@@ -48,8 +49,8 @@ class Store(private val ctx: Context) {
         o.put("exams", JSONArray().apply { exams.forEach { put(examTo(it)) } })
         o.put("results", JSONArray().apply { results.forEach { put(resTo(it, false)) } })
         o.put("active", activeId ?: "")
-        o.put("sekolah", sekolah)
-        o.put("th", JSONObject().put("tEmpty", th.tEmpty).put("tFull", th.tFull).put("tStrike", th.tStrike).put("tDiag", th.tDiag))
+        o.put("kelas", kelas)
+        o.put("th2", JSONObject().put("tEmpty", th.tEmpty).put("tMark", th.tMark).put("tFull", th.tFull).put("tStrike", th.tStrike))
         val tmp = File(ctx.filesDir, "data.json.tmp")
         tmp.writeText(o.toString())
         tmp.renameTo(dataFile)
@@ -81,7 +82,7 @@ class Store(private val ctx: Context) {
         save()
     }
 
-    // ---------- Cadangan (kompatibel dengan web) ----------
+    // ---------- Cadangan ----------
     fun backupJson(): String {
         val o = JSONObject().put("app", "koreksi-ljk").put("ver", "android").put("at", System.currentTimeMillis())
         o.put("exams", JSONArray().apply { exams.forEach { put(examTo(it)) } })
@@ -120,27 +121,23 @@ class Store(private val ctx: Context) {
 
     // ---------- JSON ----------
     private fun examTo(e: Exam) = JSONObject().apply {
-        put("id", e.id); put("nama", e.nama); put("mapel", e.mapel); put("kelas", e.kelas); put("sekolah", e.sekolah)
+        put("id", e.id); put("nama", e.nama); put("mapel", e.mapel)
         put("n", e.n); put("paket", e.paket); put("kktp", e.kktp); put("created", e.created)
         put("kunci", JSONObject().apply { e.kunci.forEach { (k, v) -> put(k, v) } })
-        put("siswa", JSONArray(e.siswa))
     }
 
     private fun examFrom(o: JSONObject): Exam {
         val k = HashMap<String, String>()
         o.optJSONObject("kunci")?.let { j -> j.keys().forEach { key -> k[key] = j.optString(key) } }
-        val s = ArrayList<String>()
-        o.optJSONArray("siswa")?.let { a -> for (i in 0 until a.length()) s.add(a.optString(i)) }
-        return Exam(o.getString("id"), o.optString("nama"), o.optString("mapel"), o.optString("kelas"), o.optString("sekolah"),
-            o.optInt("n", 40), o.optInt("paket", 1), o.optDouble("kktp", 75.0), k, s, o.optLong("created", System.currentTimeMillis()))
+        return Exam(o.getString("id"), o.optString("nama"), o.optString("mapel"),
+            o.optInt("n", 50).coerceIn(1, 50), o.optInt("paket", 1), o.optDouble("kktp", 75.0), k, o.optLong("created", System.currentTimeMillis()))
     }
 
     private fun resTo(r: Res, embedImg: Boolean) = JSONObject().apply {
-        put("id", r.id); put("examId", r.examId); put("absen", r.absen ?: JSONObject.NULL); put("paket", r.paket ?: JSONObject.NULL)
+        put("id", r.id); put("examId", r.examId); put("kelas", r.kelas); put("nama", r.nama); put("paket", r.paket)
         put("ts", r.ts)
         put("ans", JSONArray().apply { r.ans.forEach { a -> put(JSONObject().put("c", a.c ?: JSONObject.NULL).put("s", a.s).put("m", a.m).put("n", a.n)) } })
         put("ovr", JSONObject().apply { r.ovr.forEach { (q, v) -> put(q.toString(), v) } })
-        put("notes", JSONArray(r.notes))
         if (embedImg) {
             val f = File(imgDir, r.img)
             put("img", if (f.exists()) "data:image/jpeg;base64," + Base64.encodeToString(f.readBytes(), Base64.NO_WRAP) else "")
@@ -157,10 +154,8 @@ class Store(private val ctx: Context) {
         }
         val ovr = HashMap<Int, String>()
         o.optJSONObject("ovr")?.let { j -> j.keys().forEach { key -> key.toIntOrNull()?.let { q -> ovr[q] = j.optString(key) } } }
-        val notes = ArrayList<String>()
-        o.optJSONArray("notes")?.let { a -> for (i in 0 until a.length()) notes.add(a.optString(i)) }
-        return Res(o.getString("id"), o.getString("examId"), if (o.isNull("absen")) null else o.optInt("absen"),
-            if (o.isNull("paket")) null else o.optString("paket"), ans, ovr, o.optString("img"), o.optLong("ts"), notes)
+        return Res(o.getString("id"), o.getString("examId"), o.optString("kelas"), o.optString("nama"),
+            if (o.isNull("paket")) "A" else o.optString("paket", "A"), ans, ovr, o.optString("img"), o.optLong("ts"))
     }
 }
 

@@ -12,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,21 +72,16 @@ fun SettingsDialog(st: AppState) {
                 Text("Pengaturan", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
                 TextButton(onClick = { st.settings = false }) { Text("✕") }
             }
-            var sek by remember { mutableStateOf(store.sekolah) }
-            OutlinedTextField(sek, { sek = it; store.sekolah = it; store.save() }, label = { Text("Nama sekolah (default)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-
-            Text("Kepekaan pembacaan", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp))
+            Text("Kepekaan pembacaan", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             val th = store.th
-            Text("Batas kotak kosong: ${"%.2f".format(th.tEmpty)} (naikkan bila kotak kotor terbaca bertanda)", fontSize = 13.sp, color = Mut)
-            Slider(th.tEmpty.toFloat(), { store.th = th.copy(tEmpty = it.toDouble()) }, valueRange = 0.03f..0.2f, onValueChangeFinished = { store.save() })
-            Text("Batas kotak dihitamkan/coret: ${"%.2f".format(th.tFull)}", fontSize = 13.sp, color = Mut)
-            Slider(th.tFull.toFloat(), { store.th = th.copy(tFull = it.toDouble()) }, valueRange = 0.4f..0.9f, onValueChangeFinished = { store.save() })
-            Text("Batas garis \"=\" pembatalan: ${"%.2f".format(th.tStrike)}", fontSize = 13.sp, color = Mut)
-            Slider(th.tStrike.toFloat(), { store.th = th.copy(tStrike = it.toDouble()) }, valueRange = 0.5f..0.95f, onValueChangeFinished = { store.save() })
+            Text("Batas tanda jawaban: ${"%.3f".format(th.tMark)} (naikkan bila kotak kosong/kotor terbaca bertanda; turunkan bila tanda tipis tidak terbaca)", fontSize = 13.sp, color = Mut)
+            Slider(th.tMark.toFloat(), { store.th = th.copy(tMark = it.toDouble(), tEmpty = it * 0.55) }, valueRange = 0.03f..0.12f, onValueChangeFinished = { store.save() })
+            Text("Batas garis coretan (pembatalan): ${"%.1f".format(th.tStrike)} (naikkan bila silang biasa terbaca dicoret; turunkan bila coretan terbaca sebagai jawaban)", fontSize = 13.sp, color = Mut)
+            Slider(th.tStrike.toFloat(), { store.th = th.copy(tStrike = it.toDouble()) }, valueRange = 3f..9f, onValueChangeFinished = { store.save() })
             TextButton(onClick = { store.th = Thresholds(); store.save() }) { Text("Kembalikan default") }
 
             Text("Cadangan data", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-            Text("Semua data tersimpan di HP ini. Format cadangan sama dengan versi web (ljk.pak-eng.net), jadi bisa dipindah ke/dari web.", fontSize = 13.sp, color = Mut)
+            Text("Semua data tersimpan di HP ini. Buat cadangan berkala atau untuk pindah HP.", fontSize = 13.sp, color = Mut)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
                 OutlinedButton(onClick = { backup.launch("cadangan-koreksi-ljk-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + ".json") }) { Text("⬇ Cadangkan") }
                 OutlinedButton(onClick = { restore.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text("⬆ Pulihkan") }

@@ -64,27 +64,26 @@ object Xlsx {
         }
     }
 
-    /** Buku kerja rekap lengkap untuk satu ujian. */
-    fun rekapBook(e: Exam, rs: List<Res>): List<XSheet> {
+    /** Buku kerja rekap untuk satu ujian; [kelas] = label kelas yang direkap ("Semua kelas" bila gabungan). */
+    fun rekapBook(e: Exam, rs: List<Res>, kelas: String): List<XSheet> {
         val rows = rekapRows(e, rs)
         val s1 = ArrayList<List<Any?>>()
         s1.add(listOf(B("REKAP NILAI " + e.nama.uppercase())))
-        s1.add(listOf("Sekolah", e.sekolah)); s1.add(listOf("Mapel", e.mapel)); s1.add(listOf("Kelas", e.kelas))
+        s1.add(listOf("Mapel", e.mapel)); s1.add(listOf("Kelas", kelas))
         s1.add(listOf("Jumlah soal", e.n)); s1.add(listOf("KKTP", e.kktp)); s1.add(emptyList())
-        s1.add(listOf(B("No"), B("Nama"), B("Paket"), B("Benar"), B("Salah"), B("Kosong"), B("Ganda"), B("Nilai"), B("Keterangan")))
-        for (x in rows) {
+        s1.add(listOf(B("No"), B("Nama"), B("Kelas"), B("Paket"), B("Benar"), B("Salah"), B("Kosong"), B("Ganda"), B("Nilai"), B("Keterangan")))
+        rows.forEachIndexed { i, x ->
             val s = x.s
-            if (x.r == null || s == null) s1.add(listOf(x.absen, x.nama, "", "", "", "", "", "", "Belum dikoreksi"))
-            else s1.add(listOf(x.absen ?: "?", x.nama, x.r.paket ?: "?", s.benar, s.salah, s.kosong, s.ganda, s.nilai,
+            s1.add(listOf(i + 1, x.r.nama, x.r.kelas, x.r.paket, s.benar, s.salah, s.kosong, s.ganda, s.nilai,
                 if (s.nilai == null) "Kunci belum lengkap" else if (s.nilai >= e.kktp) "Tuntas" else "Remedial"))
         }
         val s2 = ArrayList<List<Any?>>()
-        s2.add(listOf(B("No"), B("Nama"), B("Paket")) + (1..e.n).map { B(it) })
-        rows.filter { it.r != null }.forEach { x ->
-            s2.add(listOf<Any?>(x.absen ?: "?", x.nama, x.r!!.paket ?: "?") + (0 until e.n).map { q -> val f = finalAns(x.r, q); if (f.st == "ganda") "GANDA" else f.ch ?: "" })
+        s2.add(listOf(B("No"), B("Nama"), B("Kelas"), B("Paket")) + (1..e.n).map { B(it) })
+        rows.forEachIndexed { i, x ->
+            s2.add(listOf<Any?>(i + 1, x.r.nama, x.r.kelas, x.r.paket) + (0 until e.n).map { q -> val f = finalAns(x.r, q); if (f.st == "ganda") "GANDA" else f.ch ?: "" })
         }
-        e.paketLetters.forEach { p -> s2.add(listOf<Any?>("", "KUNCI $p", p) + e.key(p).padEnd(e.n, '-').take(e.n).map { it.toString() }) }
-        val out = arrayListOf(XSheet("Rekap", s1, listOf(6, 32, 7, 8, 8, 8, 8, 9, 16)), XSheet("Jawaban", s2, listOf(6, 28, 7)))
+        e.paketLetters.forEach { p -> s2.add(listOf<Any?>("", "KUNCI $p", "", p) + e.key(p).padEnd(e.n, '-').take(e.n).map { it.toString() }) }
+        val out = arrayListOf(XSheet("Rekap", s1, listOf(6, 32, 12, 7, 8, 8, 8, 8, 9, 16)), XSheet("Jawaban", s2, listOf(6, 28, 12, 7)))
         for (p in e.paketLetters) {
             val a = analyze(e, rs, p)
             if (a.N < 2) continue

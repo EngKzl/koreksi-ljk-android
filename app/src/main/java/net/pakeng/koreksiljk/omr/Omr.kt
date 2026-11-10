@@ -1,13 +1,12 @@
 package net.pakeng.koreksiljk.omr
 
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sign
+import kotlin.math.sqrt
 
 /** Persegi dalam satuan mm pada lembar A4. */
 data class Rect(val x: Double, val y: Double, val w: Double, val h: Double)
@@ -26,60 +25,51 @@ class Gray(val w: Int, val h: Int, val g: IntArray) {
     }
 }
 
-/** Tata letak LJK (mm, A4). Harus sama persis dengan versi web. */
+/**
+ * Tata letak LJK SMK PGRI 2 Kota Jambi (mm, A4): dua tabel 25 baris x 5 kolom (A–E),
+ * soal 1–25 di kiri dan 26–50 di kanan. Diukur dari lembar kosong hasil scan.
+ */
 object Layout {
     const val W = 210.0
     const val H = 297.0
-    const val MS = 10.0
-    val markers = arrayOf(doubleArrayOf(13.0, 13.0), doubleArrayOf(197.0, 13.0), doubleArrayOf(197.0, 284.0), doubleArrayOf(13.0, 284.0))
-    val orient = Rect(22.0, 10.0, 18.0, 5.0)
-    val orientOpp = Rect(170.0, 282.0, 18.0, 5.0)
-    const val BOX = 5.5
-    const val INSET = 1.0
-    const val PX = 9.0
-    const val PY = 8.0
-    const val LM = 3.5
-    val ansX0 = doubleArrayOf(22.0, 84.0, 146.0)
-    const val ANS_Y0 = 100.0
-    const val ROWS = 20
-    val idY = doubleArrayOf(58.0, 70.0)
-    const val ID_X = 43.0
-    const val PAKET_X = 148.0
-    const val PAKET_Y = 58.0
+    const val ROWS = 25
+    const val MAXQ = 50
+
+    /** Garis tegak tiap tabel (6 garis = 5 kolom). */
+    val xLines = arrayOf(
+        doubleArrayOf(33.30, 46.02, 58.76, 70.48, 81.16, 93.09),
+        doubleArrayOf(123.97, 135.62, 147.56, 159.21, 171.14, 182.98),
+    )
+    val yTop = doubleArrayOf(91.0, 90.8)
+    val yBot = doubleArrayOf(251.3, 251.3)
+
+    /** Area tulisan tangan Nama/Kelas/Mapel. */
+    val nameBox = Rect(70.0, 59.0, 56.0, 22.0)
 
     fun ansBox(q: Int, o: Int): Rect {
-        val c = q / ROWS
+        val t = q / ROWS
         val r = q % ROWS
-        return Rect(ansX0[c] + 11 + PX * o, ANS_Y0 + r * PY, BOX, BOX)
+        val rh = (yBot[t] - yTop[t]) / ROWS
+        return Rect(xLines[t][o], yTop[t] + r * rh, xLines[t][o + 1] - xLines[t][o], rh)
     }
-
-    fun idBox(row: Int, d: Int) = Rect(ID_X + PX * d, idY[row], BOX, BOX)
-    fun paketBox(i: Int) = Rect(PAKET_X + PX * i, PAKET_Y, BOX, BOX)
-    fun blockMarkers(c: Int): Array<DoubleArray> {
-        val x0 = ansX0[c]
-        val yT = ANS_Y0 - 5
-        val yB = ANS_Y0 + (ROWS - 1) * PY + BOX + 4.5
-        return arrayOf(doubleArrayOf(x0 + 1.75, yT), doubleArrayOf(x0 + 50.75, yT), doubleArrayOf(x0 + 50.75, yB), doubleArrayOf(x0 + 1.75, yB))
-    }
-
-    fun idMarkers() = arrayOf(doubleArrayOf(24.0, 50.0), doubleArrayOf(194.0, 50.0), doubleArrayOf(194.0, 80.0), doubleArrayOf(24.0, 80.0))
 }
 
-data class Thresholds(val tEmpty: Double = 0.07, val tFull: Double = 0.62, val tStrike: Double = 0.78, val tDiag: Double = 0.42)
+/**
+ * tEmpty/tMark = tambahan tinta (di luar huruf cetak) agar kotak dianggap bertanda lemah/tegas,
+ * tFull = kotak dihitamkan, tStrike = panjang garis mendatar (pembatalan) dalam satuan tebal goresan.
+ */
+data class Thresholds(val tEmpty: Double = 0.03, val tMark: Double = 0.055, val tFull: Double = 0.6, val tStrike: Double = 5.2)
 
-data class Cell(val st: String, val fill: Double, val diag: Double, val rowMax: Double)
+data class Cell(val st: String, val fill: Double, val extra: Double, val strike: Double)
 
 /** marks: "kosong" | "x" | "tanda" | "coret" ; status: ok | ragu | ganda | kosong */
-data class Decision(val choice: String?, val status: String, val note: String, val marks: List<String>)
+data class Decision(val choice: String?, val status: String, val note: String, val marks: List<String>, val cells: List<Cell> = emptyList())
 
 data class SheetResult(
     val ok: Boolean,
     val error: String? = null,
+    /** Homografi mm-halaman → piksel foto. */
     val H: DoubleArray? = null,
-    val absen: Int? = null,
-    val absenNote: String = "",
-    val paket: String? = null,
-    val paketNote: String = "",
     val answers: List<Decision> = emptyList(),
 )
 
@@ -154,191 +144,343 @@ object Omr {
         return doubleArrayOf((H[0] * x + H[1] * y + H[2]) / d, (H[3] * x + H[4] * y + H[5]) / d)
     }
 
-    private fun downscale(G: Gray, maxDim: Int): Pair<Gray, Int> {
+    /** Perkecil dengan mengambil nilai tergelap tiap blok, agar garis tabel yang tipis tidak putus. */
+    private fun minPool(G: Gray, maxDim: Int): Pair<Gray, Int> {
         val f = max(1, ceil(max(G.w, G.h).toDouble() / maxDim).toInt())
         val w = G.w / f
         val h = G.h / f
         val g = IntArray(w * h)
         for (y in 0 until h) for (x in 0 until w) {
-            var s = 0
-            for (j in 0 until f) for (i in 0 until f) s += G.g[(y * f + j) * G.w + x * f + i]
-            g[y * w + x] = s / (f * f)
+            var m = 255
+            for (j in 0 until f) for (i in 0 until f) { val v = G.g[(y * f + j) * G.w + x * f + i]; if (v < m) m = v }
+            g[y * w + x] = m
         }
         return Pair(Gray(w, h, g), f)
     }
 
-    private class Sq(val x: Double, val y: Double, val a: Int)
+    // ---------- Garis & segi empat tabel ----------
+    /** Garis a·x + b·y = c dengan (a,b) ternormalisasi. */
+    private class Line(val a: Double, val b: Double, val c: Double) {
+        fun dist(p: DoubleArray) = abs(a * p[0] + b * p[1] - c)
+    }
 
-    private fun findSquares(D: Gray, ctx: Ctx): List<Sq> {
+    private fun lineThrough(p: DoubleArray, q: DoubleArray): Line? {
+        val dx = q[0] - p[0]; val dy = q[1] - p[1]
+        val n = hypot(dx, dy)
+        if (n < 1e-9) return null
+        val a = -dy / n; val b = dx / n
+        return Line(a, b, a * p[0] + b * p[1])
+    }
+
+    /** Garis dominan (RANSAC deterministik + kuadrat terkecil total pada inlier). */
+    private fun fitLine(pts: List<DoubleArray>, tol: Double): Line? {
+        val n = pts.size
+        if (n < 8) return null
+        var best: Line? = null
+        var bestCnt = 0
+        for (k in listOf(n / 2, n / 3, n / 4, n / 6)) {
+            if (k < 2) continue
+            val step = max(1, n / 40)
+            var i = 0
+            while (i + k < n) {
+                val l = lineThrough(pts[i], pts[i + k])
+                if (l != null) {
+                    val c = pts.count { l.dist(it) <= tol }
+                    if (c > bestCnt) { bestCnt = c; best = l }
+                }
+                i += step
+            }
+        }
+        val l0 = best ?: return null
+        if (bestCnt < n * 0.3) return null
+        val inl = pts.filter { l0.dist(it) <= tol }
+        val mx = inl.sumOf { it[0] } / inl.size; val my = inl.sumOf { it[1] } / inl.size
+        var sxx = 0.0; var sxy = 0.0; var syy = 0.0
+        for (p in inl) { val dx = p[0] - mx; val dy = p[1] - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy }
+        // arah utama
+        val th = 0.5 * Math.atan2(2 * sxy, sxx - syy)
+        val dx = Math.cos(th); val dy = Math.sin(th)
+        val a = -dy; val b = dx
+        return Line(a, b, a * mx + b * my)
+    }
+
+    private fun intersect(l: Line, m: Line): DoubleArray? {
+        val d = l.a * m.b - m.a * l.b
+        if (abs(d) < 1e-9) return null
+        return doubleArrayOf((l.c * m.b - m.c * l.b) / d, (l.a * m.c - m.a * l.c) / d)
+    }
+
+    /** Segi empat tabel: pusat, sumbu panjang, panjang sisi, dan 4 sudut. */
+    private class Quad(val pts: Array<DoubleArray>) {
+        val cx = pts.sumOf { it[0] } / 4
+        val cy = pts.sumOf { it[1] } / 4
+        private fun len(i: Int, j: Int) = hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1])
+        private val s0 = (len(0, 1) + len(2, 3)) / 2
+        private val s1 = (len(1, 2) + len(3, 0)) / 2
+        val long = max(s0, s1)
+        val short = min(s0, s1)
+        /** Arah sisi panjang (satuan). */
+        val u: DoubleArray = run {
+            val (i, j) = if (s0 >= s1) Pair(0, 1) else Pair(1, 2)
+            val n = len(i, j)
+            doubleArrayOf((pts[j][0] - pts[i][0]) / n, (pts[j][1] - pts[i][1]) / n)
+        }
+    }
+
+    private fun findTables(D: Gray, ctx: Ctx): List<Quad> {
         val w = D.w; val h = D.h; val n = w * h
         val bin = ByteArray(n)
         for (y in 0 until h) for (x in 0 until w) bin[y * w + x] = ctx.dark(x.toDouble(), y.toDouble()).toByte()
         val lab = IntArray(n)
         val stack = IntArray(n)
-        val out = ArrayList<Sq>()
+        val out = ArrayList<Quad>()
         var id = 0
-        val maxA = 0.02 * n
         for (s in 0 until n) {
             if (bin[s].toInt() == 0 || lab[s] != 0) continue
             id++
             var sp = 0
             stack[sp++] = s; lab[s] = id
-            var cnt = 0; var sx = 0.0; var sy = 0.0
+            var cnt = 0
             var x0 = w; var x1 = 0; var y0 = h; var y1 = 0
             while (sp > 0) {
                 val p = stack[--sp]
                 val px = p % w; val py = p / w
-                cnt++; sx += px; sy += py
+                cnt++
                 if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py
-                if (px > 0) { val q = p - 1; if (bin[q].toInt() == 1 && lab[q] == 0) { lab[q] = id; stack[sp++] = q } }
-                if (px < w - 1) { val q = p + 1; if (bin[q].toInt() == 1 && lab[q] == 0) { lab[q] = id; stack[sp++] = q } }
-                if (py > 0) { val q = p - w; if (bin[q].toInt() == 1 && lab[q] == 0) { lab[q] = id; stack[sp++] = q } }
-                if (py < h - 1) { val q = p + w; if (bin[q].toInt() == 1 && lab[q] == 0) { lab[q] = id; stack[sp++] = q } }
+                for (dy in -1..1) for (dx in -1..1) {
+                    val qx = px + dx; val qy = py + dy
+                    if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue
+                    val q = qy * w + qx
+                    if (bin[q].toInt() == 1 && lab[q] == 0) { lab[q] = id; stack[sp++] = q }
+                }
             }
             val bw = x1 - x0 + 1; val bh = y1 - y0 + 1
-            if (cnt < 20 || cnt > maxA || bw < 5 || bh < 5) continue
-            val asp = bw.toDouble() / bh
-            val fill = cnt.toDouble() / (bw * bh)
-            if (asp < 0.5 || asp > 2 || fill < 0.55) continue
-            out.add(Sq(sx / cnt, sy / cnt, cnt))
+            if (bw.toLong() * bh < 0.015 * n || cnt > 0.5 * bw * bh || min(bw, bh) < 30) continue
+            // titik terluar tiap baris/kolom
+            val left = ArrayList<DoubleArray>(); val right = ArrayList<DoubleArray>()
+            val top = ArrayList<DoubleArray>(); val bot = ArrayList<DoubleArray>()
+            for (y in y0..y1) {
+                var a = -1; var b = -1
+                for (x in x0..x1) if (lab[y * w + x] == id) { if (a < 0) a = x; b = x }
+                if (a >= 0) { left.add(doubleArrayOf(a.toDouble(), y.toDouble())); right.add(doubleArrayOf(b.toDouble(), y.toDouble())) }
+            }
+            for (x in x0..x1) {
+                var a = -1; var b = -1
+                for (y in y0..y1) if (lab[y * w + x] == id) { if (a < 0) a = y; b = y }
+                if (a >= 0) { top.add(doubleArrayOf(x.toDouble(), a.toDouble())); bot.add(doubleArrayOf(x.toDouble(), b.toDouble())) }
+            }
+            val tol = 2.0
+            val tall = bh >= bw
+            // sisi panjang dulu; sisi pendek memakai titik yang bukan milik sisi panjang
+            val (pa, pb, qa, qb) = if (tall) listOf(left, right, top, bot) else listOf(top, bot, left, right)
+            val la = fitLine(pa, tol) ?: continue
+            val lb = fitLine(pb, tol) ?: continue
+            val rest = { pts: List<DoubleArray> -> pts.filter { la.dist(it) > 2 * tol && lb.dist(it) > 2 * tol } }
+            val lc = fitLine(rest(qa), tol) ?: continue
+            val ld = fitLine(rest(qb), tol) ?: continue
+            val c0 = intersect(la, lc) ?: continue
+            val c1 = intersect(lc, lb) ?: continue
+            val c2 = intersect(lb, ld) ?: continue
+            val c3 = intersect(ld, la) ?: continue
+            val q = Quad(arrayOf(c0, c1, c2, c3))
+            if (q.short < 20 || q.long / q.short < 1.8 || q.long / q.short > 4.2) continue
+            out.add(q)
         }
         return out
     }
 
-    private fun quadArea(p: List<Sq>): Double {
-        var s = 0.0
-        for (i in 0 until 4) { val a = p[i]; val b = p[(i + 1) % 4]; s += a.x * b.y - b.x * a.y }
-        return abs(s) / 2
-    }
-
-    private fun isConvex(p: List<Sq>): Boolean {
-        var sg = 0.0
-        for (i in 0 until 4) {
-            val a = p[i]; val b = p[(i + 1) % 4]; val c = p[(i + 2) % 4]
-            val z = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
-            if (z == 0.0) return false
-            if (sg == 0.0) sg = sign(z) else if (sign(z) != sg) return false
-        }
-        return true
-    }
-
-    private fun regionDark(ctx: Ctx, H: DoubleArray, R: Rect, n: Int = 10): Double {
+    private fun regionDark(ctx: Ctx, H: DoubleArray, R: Rect, nx: Int, ny: Int): Double {
         var c = 0
-        for (j in 0 until n) for (i in 0 until n) {
-            val p = apply(H, R.x + 0.6 + (i + 0.5) * (R.w - 1.2) / n, R.y + 0.6 + (j + 0.5) * (R.h - 1.2) / n)
+        for (j in 0 until ny) for (i in 0 until nx) {
+            val p = apply(H, R.x + (i + 0.5) * R.w / nx, R.y + (j + 0.5) * R.h / ny)
             c += ctx.dark(p[0], p[1])
         }
-        return c.toDouble() / (n * n)
+        return c.toDouble() / (nx * ny)
     }
 
-    private fun locateSheet(full: Ctx): Pair<DoubleArray?, String?> {
-        val (D, f) = downscale(full.G, 900)
-        val dctx = Ctx(D, 16)
-        val cands = findSquares(D, dctx).sortedByDescending { it.a }.take(16)
-        if (cands.size < 4) return Pair(null, "Penanda sudut LJK tidak ditemukan. Pastikan keempat kotak hitam di sudut terlihat jelas.")
-        class Combo(val q: List<Sq>, val qa: Double)
-        val combos = ArrayList<Combo>()
-        val n = cands.size
-        for (a in 0 until n) for (b in a + 1 until n) for (c in b + 1 until n) for (d in c + 1 until n) {
-            val q0 = listOf(cands[a], cands[b], cands[c], cands[d])
-            val mx = q0.maxOf { it.a }; val mn = q0.minOf { it.a }
-            if (mx.toDouble() / mn > 3) continue
-            val cx = q0.sumOf { it.x } / 4; val cy = q0.sumOf { it.y } / 4
-            val q = q0.sortedBy { atan2(it.y - cy, it.x - cx) }
-            if (!isConvex(q)) continue
-            val qa = quadArea(q)
-            if (qa < 0.08 * D.w * D.h) continue
-            val meanA = q.sumOf { it.a }.toDouble() / 4
-            if (meanA > qa * 0.01) continue
-            combos.add(Combo(q, qa))
+    /** Sudut satu tabel berurutan TL,TR,BR,BL menurut sumbu halaman (v = kanan, u = bawah). */
+    private fun label(q: Quad, v: DoubleArray, u: DoubleArray): Array<DoubleArray>? {
+        val out = arrayOfNulls<DoubleArray>(4)
+        for (p in q.pts) {
+            val dv = (p[0] - q.cx) * v[0] + (p[1] - q.cy) * v[1]
+            val du = (p[0] - q.cx) * u[0] + (p[1] - q.cy) * u[1]
+            val i = if (du < 0) (if (dv < 0) 0 else 1) else (if (dv < 0) 3 else 2)
+            if (out[i] != null) return null
+            out[i] = p
         }
-        combos.sortByDescending { it.qa }
-        for (cb in combos.take(12)) {
-            val pts = cb.q.map { doubleArrayOf(it.x * f + f / 2.0, it.y * f + f / 2.0) }
-            var bestH: DoubleArray? = null; var bestSc = -9.0; var bestOd = 0.0; var bestOo = 1.0
-            for (rot in 0 until 4) {
-                val dst = Array(4) { pts[(it + rot) % 4] }
-                val H = homography(Layout.markers, dst) ?: continue
-                val od = regionDark(full, H, Layout.orient)
-                val oo = regionDark(full, H, Layout.orientOpp)
-                if (od - oo > bestSc) { bestSc = od - oo; bestH = H; bestOd = od; bestOo = oo }
+        return Array(4) { out[it]!! }
+    }
+
+    private class Located(val page: DoubleArray, val tables: List<Array<DoubleArray>>)
+
+    private fun canonCorners(t: Int) = arrayOf(
+        doubleArrayOf(Layout.xLines[t][0], Layout.yTop[t]), doubleArrayOf(Layout.xLines[t][5], Layout.yTop[t]),
+        doubleArrayOf(Layout.xLines[t][5], Layout.yBot[t]), doubleArrayOf(Layout.xLines[t][0], Layout.yBot[t]),
+    )
+
+    private fun locate(full: Ctx): Located? {
+        val (D, f) = minPool(full.G, 1000)
+        val quads = findTables(D, Ctx(D, 16))
+        // pasangan tabel kiri-kanan terbesar
+        var best: Pair<Quad, Quad>? = null
+        var bestA = 0.0
+        for (i in quads.indices) for (j in i + 1 until quads.size) {
+            val a = quads[i]; val b = quads[j]
+            val r = a.long / b.long
+            if (r < 0.75 || r > 1.33) continue
+            if (abs(a.u[0] * b.u[0] + a.u[1] * b.u[1]) < 0.95) continue
+            val dx = b.cx - a.cx; val dy = b.cy - a.cy
+            val along = abs(dx * a.u[0] + dy * a.u[1])
+            val across = abs(-dx * a.u[1] + dy * a.u[0])
+            val sh = (a.short + b.short) / 2
+            if (across < 1.1 * sh || across > 2.3 * sh || along > 0.25 * a.long) continue
+            val area = a.long * a.short + b.long * b.short
+            if (area > bestA) { bestA = area; best = Pair(a, b) }
+        }
+        val (a, b) = best ?: return null
+        // sumbu halaman: v dari tabel a ke b (tegak lurus sisi panjang), u = v diputar 90°
+        var vx = -a.u[1]; var vy = a.u[0]
+        if (vx * (b.cx - a.cx) + vy * (b.cy - a.cy) < 0) { vx = -vx; vy = -vy }
+        val v = doubleArrayOf(vx, vy); val u = doubleArrayOf(-vy, vx)
+        val la = label(a, v, u) ?: return null
+        val lb = label(b, v, u) ?: return null
+        val up = { c: Array<DoubleArray> -> Array(4) { doubleArrayOf(c[it][0] * f + f / 2.0, c[it][1] * f + f / 2.0) } }
+        val flip = { c: Array<DoubleArray> -> arrayOf(c[2], c[3], c[0], c[1]) }
+        // dua kemungkinan arah (tegak / terbalik 180°): pilih yang kop & nomor soalnya berisi tinta
+        val hyps = listOf(Pair(up(la), up(lb)), Pair(flip(up(lb)), flip(up(la))))
+        var bestH: Located? = null
+        var bestS = -1.0
+        val c0 = canonCorners(0); val c1 = canonCorners(1)
+        for ((l, r) in hyps) {
+            val hp = homography(arrayOf(c0[0], c1[1], c1[2], c0[3]), arrayOf(l[0], r[1], r[2], l[3])) ?: continue
+            val th = Layout.yBot[0] - Layout.yTop[0]
+            val s = regionDark(full, hp, Rect(30.0, 53.0, 150.0, 31.0), 80, 30) +
+                regionDark(full, hp, Rect(Layout.xLines[0][0] - 9, Layout.yTop[0], 7.0, th), 12, 150) +
+                regionDark(full, hp, Rect(Layout.xLines[1][0] - 9, Layout.yTop[1], 7.0, th), 12, 150)
+            if (s > bestS) { bestS = s; bestH = Located(hp, listOf(l, r)) }
+        }
+        return bestH
+    }
+
+    // ---------- Garis kisi di dalam tabel ----------
+    /**
+     * Cari posisi garis kisi sepanjang satu sumbu tabel (koordinat 0..1).
+     * [vertical] = garis tegak (posisi sepanjang u). Mengembalikan null bila terlalu sedikit garis ditemukan.
+     */
+    private fun gridLines(ctx: Ctx, H: DoubleArray, expected: DoubleArray, vertical: Boolean, win: Double): DoubleArray? {
+        val lo = -win - 0.01; val hi = 1 + win + 0.01
+        val bins = if (vertical) 700 else 1400
+        val m = if (vertical) 150 else 60
+        val prof = DoubleArray(bins)
+        for (k in 0 until bins) {
+            val a = lo + (k + 0.5) * (hi - lo) / bins
+            var c = 0
+            for (j in 0 until m) {
+                val t = 0.01 + (j + 0.5) * 0.98 / m
+                val p = if (vertical) apply(H, a, t) else apply(H, t, a)
+                c += ctx.dark(p[0], p[1])
             }
-            if (bestH != null && bestOd > 0.55 && bestOo < 0.3) return Pair(bestH, null)
+            prof[k] = c.toDouble() / m
         }
-        return Pair(null, "LJK tidak dikenali (orientasi/penanda). Foto ulang dengan seluruh lembar terlihat dan tidak terpotong.")
-    }
-
-    // ---------- Perbaikan lokal per blok ----------
-    private fun pxPerMm(H: DoubleArray, x: Double, y: Double): Double {
-        val a = apply(H, x, y); val b = apply(H, x + 10, y)
-        return hypot(b[0] - a[0], b[1] - a[1]) / 10
-    }
-
-    private fun refinePoint(ctx: Ctx, H: DoubleArray, cx: Double, cy: Double): Pair<DoubleArray, Boolean> {
-        val s = pxPerMm(H, cx, cy)
-        val p0 = apply(H, cx, cy)
-        var u = p0[0]; var v = p0[1]
-        val R = 3.2 * s
-        val expA = (Layout.LM * s) * (Layout.LM * s)
-        repeat(3) {
-            var c = 0; var sx = 0.0; var sy = 0.0
-            val x0 = (u - R).toInt() - 1; val x1 = (u + R).toInt() + 1
-            val y0 = (v - R).toInt() - 1; val y1 = (v + R).toInt() + 1
-            for (y in y0..y1) for (x in x0..x1) {
-                val dx = x - u; val dy = y - v
-                if (dx * dx + dy * dy > R * R) continue
-                if (ctx.dark(x.toDouble(), y.toDouble()) == 1) { c++; sx += x; sy += y }
-            }
-            if (c < expA * 0.35 || c > expA * 2.2) return Pair(p0, false)
-            u = sx / c; v = sy / c
+        val sm = DoubleArray(bins) { k -> prof[k] + (if (k > 0) prof[k - 1] else 0.0) + (if (k < bins - 1) prof[k + 1] else 0.0) }
+        val off = arrayOfNulls<Double>(expected.size)
+        var found = 0
+        for (i in expected.indices) {
+            val k0 = (((expected[i] - win) - lo) / (hi - lo) * bins).toInt().coerceIn(0, bins - 1)
+            val k1 = (((expected[i] + win) - lo) / (hi - lo) * bins).toInt().coerceIn(0, bins - 1)
+            var bk = k0
+            for (k in k0..k1) if (sm[k] > sm[bk]) bk = k
+            if (sm[bk] >= 0.5) { off[i] = lo + (bk + 0.5) * (hi - lo) / bins - expected[i]; found++ }
         }
-        return Pair(doubleArrayOf(u, v), true)
-    }
-
-    private fun localH(ctx: Ctx, H: DoubleArray, marks: Array<DoubleArray>): DoubleArray {
-        val r = marks.map { refinePoint(ctx, H, it[0], it[1]) }
-        if (r.count { it.second } < 4) return H
-        return homography(marks, Array(4) { r[it].first }) ?: H
+        if (found < expected.size * 0.6) return null
+        // garis yang tak ditemukan memakai pergeseran garis terdekat yang ditemukan
+        return DoubleArray(expected.size) { i ->
+            var d = 0
+            var o: Double? = off[i]
+            while (o == null) { d++; o = off.getOrNull(i - d) ?: off.getOrNull(i + d) }
+            expected[i] + o
+        }
     }
 
     // ---------- Analisis kotak ----------
-    fun analyzeCell(ctx: Ctx, H: DoubleArray, R: Rect, th: Thresholds): Cell {
-        val n = 18
-        val ins = Layout.INSET
-        val s = R.w - 2 * ins
-        val m = IntArray(n * n)
-        var cnt = 0
-        for (j in 0 until n) for (i in 0 until n) {
-            val p = apply(H, R.x + ins + (i + 0.5) * s / n, R.y + ins + (j + 0.5) * s / n)
-            val d = ctx.dark(p[0], p[1]); m[j * n + i] = d; cnt += d
+    private const val NX = 60
+    private const val NY = 30
+
+    /**
+     * Ukuran garis pembatalan: panjang garis mendatar terpanjang (boleh sedikit miring) dibagi tebal goresan.
+     * Piksel huruf cetak ([letter]) tidak dihitung dan tidak memutus garis.
+     */
+    private fun strikeLen(m: IntArray, letter: BooleanArray): Double {
+        // tebal goresan: median dari min(panjang lari mendatar, tegak) tiap piksel tinta
+        val th = ArrayList<Int>()
+        for (y in 0 until NY) for (x in 0 until NX) {
+            val i = y * NX + x
+            if (m[i] == 0 || letter[i]) continue
+            var a = x; while (a > 0 && m[y * NX + a - 1] == 1) a--
+            var b = x; while (b < NX - 1 && m[y * NX + b + 1] == 1) b++
+            var c = y; while (c > 0 && m[(c - 1) * NX + x] == 1) c--
+            var d = y; while (d < NY - 1 && m[(d + 1) * NX + x] == 1) d++
+            th.add(min(b - a + 1, d - c + 1))
         }
-        val fill = cnt.toDouble() / (n * n)
-        var rowMax = 0.0
-        for (j in 2 until n - 2) {
-            var r = 0
-            for (i in 0 until n) r += m[j * n + i]
-            rowMax = max(rowMax, r.toDouble() / n)
-        }
-        val b = 4
-        var d1 = 0; var d2 = 0
-        for (i in 0 until n) {
-            var h1 = 0; var h2 = 0
-            for (k in -b..b) {
-                val a = i + k; val c = n - 1 - i + k
-                if (a in 0 until n && m[i * n + a] == 1) h1 = 1
-                if (c in 0 until n && m[i * n + c] == 1) h2 = 1
+        val ink = th.size
+        if (ink < 8) return 0.0
+        th.sort()
+        val t = th[ink / 2].toDouble()
+        var bestV = 0.0
+        for (s in -6..6) {
+            val slope = s * 0.05
+            for (y0 in 0 until NY) {
+                var best = 0; var cur = 0; var gap = 0
+                for (x in 0 until NX) {
+                    val y = (y0 + slope * (x - NX / 2)).roundToInt()
+                    if (y !in 0 until NY) { cur = 0; gap = 0; continue }
+                    val i = y * NX + x
+                    if (letter[i]) continue
+                    if (m[i] == 1) { cur += 1 + gap; gap = 0; if (cur > best) best = cur }
+                    else if (cur > 0 && gap < 1) gap++
+                    else { cur = 0; gap = 0 }
+                }
+                val v = best / t
+                if (v <= bestV) continue
+                // garis coretan memotong tanda: harus ada tinta di atas DAN di bawah garis
+                // (busur atas/bawah lingkaran hanya punya tinta di satu sisi)
+                var above = 0; var below = 0
+                for (x in 0 until NX) {
+                    val yl = (y0 + slope * (x - NX / 2)).roundToInt()
+                    for (y in 0 until NY) {
+                        val i = y * NX + x
+                        if (m[i] == 0 || letter[i]) continue
+                        if (y < yl - 1) above++ else if (y > yl + 2) below++
+                    }
+                }
+                if (min(above, below) >= 0.15 * ink) bestV = v
             }
-            d1 += h1; d2 += h2
         }
-        val diag = min(d1, d2).toDouble() / n
-        val st = when {
-            fill < th.tEmpty -> "kosong"
-            fill >= th.tFull -> "coret"
-            rowMax >= th.tStrike && fill > 0.18 -> "coret"
-            diag >= th.tDiag -> "x"
-            else -> "tanda"
+        return bestV
+    }
+
+    private class Raw(val m: IntArray, val fill: Double)
+
+    private fun rawCell(ctx: Ctx, H: DoubleArray, u0: Double, u1: Double, v0: Double, v1: Double): Raw {
+        val du = (u1 - u0) * 0.08; val dv = (v1 - v0) * 0.15
+        val m = IntArray(NX * NY)
+        var cnt = 0
+        for (j in 0 until NY) for (i in 0 until NX) {
+            val p = apply(H, u0 + du + (i + 0.5) * (u1 - u0 - 2 * du) / NX, v0 + dv + (j + 0.5) * (v1 - v0 - 2 * dv) / NY)
+            val d = ctx.dark(p[0], p[1]); m[j * NX + i] = d; cnt += d
         }
-        return Cell(st, fill, diag, rowMax)
+        return Raw(m, cnt.toDouble() / (NX * NY))
+    }
+
+    /** Huruf cetak satu kolom = piksel yang gelap di banyak baris, dilebarkan 1 piksel. */
+    private fun letterMask(col: List<Raw>): BooleanArray {
+        val core = BooleanArray(NX * NY) { i -> col.count { it.m[i] == 1 } >= col.size * 0.4 }
+        return BooleanArray(NX * NY) { i ->
+            val x = i % NX; val y = i / NX
+            var d = false
+            for (dy in -1..1) for (dx in -1..1) { val xx = x + dx; val yy = y + dy; if (xx in 0 until NX && yy in 0 until NY && core[yy * NX + xx]) d = true }
+            d
+        }
     }
 
     fun decide(cells: List<Cell>, labels: List<String>): Decision {
@@ -350,48 +492,57 @@ object Omr {
         when {
             xs.size == 1 -> {
                 choice = xs[0]; status = if (tn.isNotEmpty()) "ragu" else "ok"
-                if (co.isNotEmpty()) note = "ada coretan, dipakai silang"
+                if (co.isNotEmpty()) note = "ada coretan, dipakai tanda yang tidak dicoret"
                 if (tn.isNotEmpty()) note = "ada tanda lain"
             }
-            xs.size > 1 -> { status = "ganda"; note = "silang " + xs.joinToString(",") { labels[it] } }
-            tn.size == 1 -> { choice = tn[0]; status = "ragu"; note = "tanda bukan silang tegas" + if (co.isNotEmpty()) ", ada coretan" else "" }
-            tn.size > 1 -> { status = "ganda"; note = "tanda " + tn.joinToString(",") { labels[it] } }
+            xs.size > 1 -> { status = "ganda"; note = "tanda di " + xs.joinToString(",") { labels[it] } }
+            tn.size == 1 -> { choice = tn[0]; status = "ragu"; note = "tanda kurang tegas" + if (co.isNotEmpty()) ", ada coretan" else "" }
+            tn.size > 1 -> { status = "ganda"; note = "tanda di " + tn.joinToString(",") { labels[it] } }
             else -> { status = "kosong"; if (co.isNotEmpty()) note = "semua dicoret/dibatalkan" }
         }
-        return Decision(choice?.let { labels[it] }, status, note, cells.map { it.st })
+        return Decision(choice?.let { labels[it] }, status, note, cells.map { it.st }, cells)
     }
 
     // ---------- Baca LJK lengkap ----------
-    fun readSheet(G: Gray, n: Int, nPaket: Int, th: Thresholds = Thresholds()): SheetResult {
+    fun readSheet(G: Gray, n: Int, th: Thresholds = Thresholds()): SheetResult {
         val ctx = Ctx(G, 11)
-        val (H, err) = locateSheet(ctx)
-        if (H == null) return SheetResult(false, err)
-        val idH = localH(ctx, H, Layout.idMarkers())
-        fun digitRow(r: Int) = decide((0 until 10).map { analyzeCell(ctx, idH, Layout.idBox(r, it), th) }, (0 until 10).map { it.toString() })
-        val t = digitRow(0); val u = digitRow(1)
-        var absen: Int? = null
-        if (u.choice != null && (t.choice != null || t.status == "kosong")) absen = (t.choice?.toInt() ?: 0) * 10 + u.choice.toInt()
-        val absenNote = when {
-            t.status == "ganda" || u.status == "ganda" -> "No. absen ganda"
-            absen == null -> "No. absen tidak terbaca"
-            else -> ""
+        val loc = locate(ctx) ?: return SheetResult(false, "Tabel jawaban tidak ditemukan. Pastikan kedua tabel (1–25 dan 26–50) terlihat utuh, lembar rata, dan cahaya cukup.")
+        val unit = arrayOf(doubleArrayOf(0.0, 0.0), doubleArrayOf(1.0, 0.0), doubleArrayOf(1.0, 1.0), doubleArrayOf(0.0, 1.0))
+        val answers = ArrayList<Decision>()
+        for (t in 0 until 2) {
+            if (t * Layout.ROWS >= n) break
+            val ht = homography(unit, loc.tables[t]) ?: return SheetResult(false, "Tabel jawaban tidak terbaca.")
+            val xl0 = Layout.xLines[t]
+            val ex = DoubleArray(6) { (xl0[it] - xl0[0]) / (xl0[5] - xl0[0]) }
+            val ey = DoubleArray(Layout.ROWS + 1) { it.toDouble() / Layout.ROWS }
+            val xl = gridLines(ctx, ht, ex, true, 0.045)
+            val yl = gridLines(ctx, ht, ey, false, 0.012)
+            if (xl == null || yl == null) return SheetResult(false, "Garis tabel jawaban tidak terbaca jelas. Foto ulang lebih dekat, tegak lurus, dan tidak buram.")
+            val raw = Array(Layout.ROWS) { r -> Array(5) { o -> rawCell(ctx, ht, xl[o], xl[o + 1], yl[r], yl[r + 1]) } }
+            // tinta huruf cetak tiap kolom = kuartil bawah isi kotak kolom itu
+            val base = DoubleArray(5) { o -> raw.map { it[o].fill }.sorted()[Layout.ROWS / 4] }
+            val letter = Array(5) { o -> letterMask(raw.map { it[o] }) }
+            for (r in 0 until Layout.ROWS) {
+                if (t * Layout.ROWS + r >= n) break
+                val cells = (0 until 5).map { o ->
+                    val c = raw[r][o]
+                    val extra = c.fill - base[o]
+                    val strike = strikeLen(c.m, letter[o])
+                    val st = when {
+                        c.fill >= th.tFull || strike >= th.tStrike -> "coret"
+                        extra >= th.tMark -> "x"
+                        extra >= th.tEmpty -> "tanda"
+                        else -> "kosong"
+                    }
+                    Cell(st, c.fill, extra, strike)
+                }
+                answers.add(decide(cells, LET))
+            }
         }
-        var paket: String? = "A"
-        var paketNote = ""
-        if (nPaket > 1) {
-            val p = decide((0 until nPaket).map { analyzeCell(ctx, idH, Layout.paketBox(it), th) }, LET.take(nPaket))
-            if (p.choice != null) paket = p.choice else { paket = null; paketNote = if (p.status == "ganda") "Paket ganda" else "Paket tidak terbaca" }
-        }
-        val blocks = (n + Layout.ROWS - 1) / Layout.ROWS
-        val hs = (0 until blocks).map { localH(ctx, H, Layout.blockMarkers(it)) }
-        val answers = (0 until n).map { q ->
-            val hb = hs[q / Layout.ROWS]
-            decide((0 until 5).map { analyzeCell(ctx, hb, Layout.ansBox(q, it), th) }, LET)
-        }
-        return SheetResult(true, null, H, absen, absenNote, paket, paketNote, answers)
+        return SheetResult(true, null, loc.page, answers)
     }
 
-    /** Render LJK lurus (untuk tinjauan): menghasilkan piksel ARGB berukuran (210*scale)x(297*scale). */
+    /** Render lembar lurus (untuk tinjauan): piksel ARGB berukuran (210*scale)x(297*scale). */
     fun warp(srcW: Int, srcH: Int, src: IntArray, H: DoubleArray, scale: Int): Triple<Int, Int, IntArray> {
         val w = (Layout.W * scale).toInt(); val h = (Layout.H * scale).toInt()
         val out = IntArray(w * h)

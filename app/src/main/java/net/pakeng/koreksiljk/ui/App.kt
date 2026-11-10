@@ -70,7 +70,7 @@ fun App(store: Store) {
         topBar = { Header(st) },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
-                listOf("ujian" to "📋\nUjian", "ljk" to "🖨\nLJK", "koreksi" to "📷\nKoreksi", "rekap" to "📊\nRekap", "analisis" to "🔎\nAnalisis").forEach { (k, l) ->
+                listOf("ujian" to "📋\nUjian", "koreksi" to "📷\nKoreksi", "rekap" to "📊\nRekap", "analisis" to "🔎\nAnalisis").forEach { (k, l) ->
                     val (ic, lb) = l.split("\n")
                     NavigationBarItem(
                         selected = st.page == k,
@@ -86,7 +86,6 @@ fun App(store: Store) {
         Box(Modifier.fillMaxSize().padding(pad)) {
             when (st.page) {
                 "ujian" -> UjianScreen(st)
-                "ljk" -> LjkScreen(st)
                 "koreksi" -> KoreksiScreen(st)
                 "rekap" -> RekapScreen(st)
                 else -> AnalisisScreen(st)
@@ -149,11 +148,11 @@ private fun Header(st: AppState) {
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f)) {
             TextButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().background(Color(0x1FFFFFFF), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))) {
-                Text(store.active?.let { "${it.nama} · ${it.kelas} ▾" } ?: "(belum ada ujian)", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                Text(store.active?.let { "${it.nama} · ${it.mapel} ▾" } ?: "(belum ada ujian)", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 store.exams.forEach { e ->
-                    DropdownMenuItem(text = { Text("${e.nama} · ${e.kelas}") }, onClick = { store.activeId = e.id; store.save(); open = false })
+                    DropdownMenuItem(text = { Text("${e.nama} · ${e.mapel}") }, onClick = { store.activeId = e.id; store.save(); open = false })
                 }
             }
         }

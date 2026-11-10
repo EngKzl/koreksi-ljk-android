@@ -74,35 +74,46 @@ fun RekapScreen(st: AppState) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var askClear by remember { mutableStateOf(false) }
-    val rs = store.resultsOf(e.id)
+    val all = store.resultsOf(e.id)
+    val classes = all.map { it.kelas }.distinct().sorted()
+    // kelas yang direkap: null = semua kelas
+    var kelas by remember(e.id) { mutableStateOf(store.kelas.takeIf { it in classes }) }
+    if (kelas != null && kelas !in classes) kelas = null
+    val rs = if (kelas == null) all else all.filter { it.kelas == kelas }
+    val label = kelas ?: "Semua kelas"
     val rows = rekapRows(e, rs)
-    val vals = rows.mapNotNull { it.s?.nilai }
+    val vals = rows.mapNotNull { it.s.nilai }
     val tuntas = vals.count { it >= e.kktp }
+    val fileName = "Rekap_${safeName(e.nama)}_${safeName(e.mapel)}_${safeName(label)}.xlsx"
 
     fun xlsxFile(): File {
-        val f = File(File(ctx.cacheDir, "export").apply { mkdirs() }, "Rekap_${safeName(e.nama)}_${safeName(e.kelas)}.xlsx")
-        f.outputStream().use { Xlsx.write(it, Xlsx.rekapBook(e, rs)) }
+        val f = File(File(ctx.cacheDir, "export").apply { mkdirs() }, fileName)
+        f.outputStream().use { Xlsx.write(it, Xlsx.rekapBook(e, rs, label)) }
         return f
     }
 
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) {
             try {
-                ctx.contentResolver.openOutputStream(uri)!!.use { Xlsx.write(it, Xlsx.rekapBook(e, rs)) }
+                ctx.contentResolver.openOutputStream(uri)!!.use { Xlsx.write(it, Xlsx.rekapBook(e, rs, label)) }
                 scope.launch { st.snack.showSnackbar("File Excel tersimpan") }
             } catch (ex: Exception) { scope.launch { st.snack.showSnackbar("Gagal menyimpan: ${ex.message}") } }
         }
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        Text("Rekap Nilai", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Rekap Nilai · $label", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Choice("Semua (${all.size})", kelas == null) { kelas = null }
+            classes.forEach { k -> Choice("$k (${all.count { it.kelas == k }})", kelas == k) { kelas = k } }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-            Button(onClick = { saver.launch("Rekap_${safeName(e.nama)}_${safeName(e.kelas)}.xlsx") }) { Text("⬇ Simpan Excel") }
+            Button(onClick = { saver.launch(fileName) }) { Text("⬇ Simpan Excel") }
             OutlinedButton(onClick = { share(ctx, xlsxFile(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Bagikan rekap") }) { Text("⇪ Bagikan") }
-            TextButton(onClick = { askClear = true }) { Text("Hapus semua", color = No) }
+            TextButton(onClick = { askClear = true }) { Text("Hapus", color = No) }
         }
         StatGrid(listOf(
-            "Terkoreksi" to "${rows.count { it.r != null }}/${maxOf(rows.size, e.siswa.size)}",
+            "Terkoreksi" to "${rows.size}",
             "Rata-rata" to fmt(if (vals.isEmpty()) null else vals.average()),
             "Tertinggi" to fmt(vals.maxOrNull()),
             "Terendah" to fmt(vals.minOrNull()),
@@ -111,29 +122,28 @@ fun RekapScreen(st: AppState) {
         ))
         Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp)).border(1.dp, Bd, RoundedCornerShape(10.dp)).horizontalScroll(rememberScrollState())) {
             Row(Modifier.background(Color(0xFFF7F9F8))) {
-                Cell("No", 40.dp, true, Mut); Cell("Nama", 170.dp, true, Mut); Cell("Pkt", 40.dp, true, Mut); Cell("B", 36.dp, true, Mut)
+                Cell("No", 40.dp, true, Mut); Cell("Nama", 170.dp, true, Mut); Cell("Kelas", 80.dp, true, Mut); Cell("B", 36.dp, true, Mut)
                 Cell("S", 36.dp, true, Mut); Cell("K", 36.dp, true, Mut); Cell("G", 36.dp, true, Mut); Cell("Nilai", 60.dp, true, Mut); Cell("Ket.", 90.dp, true, Mut)
             }
-            rows.forEach { x ->
+            rows.forEachIndexed { i, x ->
                 val s = x.s
-                Row(Modifier.clickable(enabled = x.r != null) { x.r?.let { st.detailId = it.id } }, verticalAlignment = Alignment.CenterVertically) {
-                    Cell("${x.absen ?: "?"}", 40.dp); Cell(x.nama.ifEmpty { "—" }, 170.dp)
-                    if (x.r == null || s == null) { Cell("belum dikoreksi", 334.dp, color = Mut) } else {
-                        Cell(x.r.paket ?: "?", 40.dp); Cell("${s.benar}", 36.dp); Cell("${s.salah}", 36.dp); Cell("${s.kosong}", 36.dp)
-                        Cell(if (s.ganda > 0) "${s.ganda}" else "", 36.dp, color = Warn); Cell(fmt(s.nilai), 60.dp, true)
-                        Cell(
-                            when { s.nilai == null -> "kunci?"; s.nilai >= e.kktp -> "Tuntas"; else -> "Remedial" } + if (s.ragu > 0 || x.r.absen == null || x.r.paket == null) " ⚠" else "",
-                            90.dp, true, when { s.nilai == null -> Mut; s.nilai >= e.kktp -> Ok; else -> No },
-                        )
-                    }
+                Row(Modifier.clickable { st.detailId = x.r.id }, verticalAlignment = Alignment.CenterVertically) {
+                    Cell("${i + 1}", 40.dp)
+                    Cell(x.r.nama.ifBlank { "(nama belum diisi)" }, 170.dp, color = if (x.r.nama.isBlank()) No else Color.Unspecified)
+                    Cell(x.r.kelas, 80.dp); Cell("${s.benar}", 36.dp); Cell("${s.salah}", 36.dp); Cell("${s.kosong}", 36.dp)
+                    Cell(if (s.ganda > 0) "${s.ganda}" else "", 36.dp, color = Warn); Cell(fmt(s.nilai), 60.dp, true)
+                    Cell(
+                        when { s.nilai == null -> "kunci?"; s.nilai >= e.kktp -> "Tuntas"; else -> "Remedial" } + if (s.ragu > 0) " ⚠" else "",
+                        90.dp, true, when { s.nilai == null -> Mut; s.nilai >= e.kktp -> Ok; else -> No },
+                    )
                 }
             }
         }
-        Text("Ketuk baris untuk melihat LJK & mengoreksi manual. Nilai dihitung ulang otomatis bila kunci diubah.", color = Mut, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text("Ketuk baris untuk melihat LJK, mengisi nama, dan mengoreksi manual. Nilai dihitung ulang otomatis bila kunci diubah.", color = Mut, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
     if (askClear) AlertDialog(onDismissRequest = { askClear = false },
-        title = { Text("Hapus semua hasil?") },
-        text = { Text("Semua hasil koreksi untuk \"${e.nama} · ${e.kelas}\" akan dihapus.") },
-        confirmButton = { TextButton(onClick = { rs.forEach { store.deleteResult(it.id) }; sessionIds.clear(); askClear = false }) { Text("Hapus", color = No) } },
+        title = { Text("Hapus hasil $label?") },
+        text = { Text("${rs.size} hasil koreksi \"${e.nama} · ${e.mapel}\" ($label) akan dihapus.") },
+        confirmButton = { TextButton(onClick = { rs.forEach { store.deleteResult(it.id); sessionIds.remove(it.id) }; askClear = false }) { Text("Hapus", color = No) } },
         dismissButton = { TextButton(onClick = { askClear = false }) { Text("Batal") } })
 }

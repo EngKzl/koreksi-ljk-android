@@ -65,6 +65,7 @@ fun KoreksiScreen(st: AppState) {
     var prog by remember { mutableStateOf<Float?>(null) }
     var errors by remember { mutableStateOf<List<String>>(emptyList()) }
     var keyAsk by remember { mutableStateOf<Pair<String, String>?>(null) } // paket to key
+    var paket by remember(e.id) { mutableStateOf("A") }
     val capFile = remember { File(File(ctx.cacheDir, "photos").apply { mkdirs() }, "capture.jpg") }
     val capUri = remember { FileProvider.getUriForFile(ctx, ctx.packageName + ".files", capFile) }
 
@@ -80,23 +81,18 @@ fun KoreksiScreen(st: AppState) {
                 val id = newId()
                 val imgName = "$id.jpg"
                 try {
-                    val sc = withContext(Dispatchers.Default) { Scanner.scan(ctx, uri, e.n, e.paket, store.th, File(store.imgDir, imgName)) }
+                    val sc = withContext(Dispatchers.Default) { Scanner.scan(ctx, uri, e.n, store.th, File(store.imgDir, imgName)) }
                     val r = sc.sheet
                     if (!r.ok) { errs.add("Foto ${i + 1}: ${r.error}"); continue }
                     if (mode == "kunci") {
                         File(store.imgDir, imgName).delete()
                         val key = sc.ans.joinToString("") { a -> if ((a.s == "ok" || a.s == "ragu") && a.c != null) a.c else "-" }
-                        keyAsk = Pair(r.paket ?: "A", key)
+                        keyAsk = Pair(paket, key)
                         okc++; continue
                     }
-                    val dup = if (r.absen != null) store.resultsOf(e.id).firstOrNull { it.absen == r.absen } else null
-                    val rid = dup?.id ?: id
-                    if (dup != null) File(store.imgDir, dup.img).delete()
-                    val rec = Res(rid, e.id, r.absen, r.paket, sc.ans, emptyMap(), imgName, System.currentTimeMillis(), listOf(r.absenNote, r.paketNote).filter { it.isNotEmpty() })
-                    store.putResult(rec)
-                    sessionIds.remove(rid); sessionIds.add(0, rid)
-                    lastId = rid
-                    if (dup != null) { val ab = r.absen; launch { st.snack.showSnackbar("Absen $ab sudah ada → diganti hasil terbaru") } }
+                    store.putResult(Res(id, e.id, store.kelas, "", paket, sc.ans, emptyMap(), imgName, System.currentTimeMillis()))
+                    sessionIds.add(0, id)
+                    lastId = id
                     okc++
                 } catch (ex: Throwable) {
                     errs.add("Foto ${i + 1}: ${ex.message ?: ex.javaClass.simpleName}")
@@ -105,10 +101,8 @@ fun KoreksiScreen(st: AppState) {
             prog = null
             errors = errs
             if (mode == "siswa" && okc > 0 && errs.isEmpty()) launch { st.snack.showSnackbar("$okc LJK terkoreksi") }
-            if (mode == "siswa" && uris.size == 1 && lastId != null) {
-                val r = store.results.firstOrNull { it.id == lastId }
-                if (r != null) { val s = score(e, r); if (r.absen == null || r.paket == null || s.ganda > 0 || s.ragu > 0) st.detailId = r.id }
-            }
+            // satu foto: langsung buka detail untuk mengisi nama & memeriksa hasil
+            if (mode == "siswa" && uris.size == 1 && lastId != null) st.detailId = lastId
         }
     }
 
@@ -125,16 +119,24 @@ fun KoreksiScreen(st: AppState) {
                 }
             }
             Text(
-                if (mode == "siswa") "Foto LJK satu per satu, atau pilih banyak file hasil scan sekaligus. Hasil langsung tersimpan; periksa soal bertanda kuning/oranye."
-                else "Mode kunci: isi satu LJK dengan jawaban benar (silang), pilih paketnya, lalu foto. Kunci paket tersebut terisi otomatis.",
+                if (mode == "siswa") "Pilih kelas, lalu foto LJK satu per satu atau pilih banyak file hasil scan sekaligus. Nama siswa diisi setelah scan (LJK hanya memuat tulisan tangan)."
+                else "Mode kunci: isi satu LJK kosong dengan jawaban benar (silang), lalu foto. Kunci terisi otomatis.",
                 color = Mut, fontSize = 13.sp, modifier = Modifier.padding(vertical = 10.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (mode == "siswa") {
+                Text("Kelas: ${store.kelas}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                KelasPicker(store.kelas) { store.kelas = it; store.save() }
+            }
+            if (e.paket > 1) Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                Text("Paket soal:", fontSize = 13.sp, color = Mut)
+                e.paketLetters.forEach { x -> Choice(x, x == paket, Modifier.weight(1f)) { paket = x } }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
                 Button(enabled = prog == null, onClick = { camera.launch(capUri) }, modifier = Modifier.weight(1f).height(56.dp)) { Text("📷 Foto LJK", fontSize = 16.sp) }
                 OutlinedButton(enabled = prog == null, onClick = { picker.launch("image/*") }, modifier = Modifier.weight(1f).height(56.dp)) { Text("🖼 Pilih file", fontSize = 16.sp) }
             }
             prog?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) }
-            Text("Tips: letakkan LJK di permukaan datar dan terang, seluruh lembar & 4 kotak hitam masuk bingkai, hindari bayangan HP.", color = Mut, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+            Text("Tips: letakkan LJK di permukaan datar dan terang, seluruh lembar (kop sampai tanda tangan) masuk bingkai, hindari bayangan HP.", color = Mut, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
         }
         val rs = sessionIds.mapNotNull { id -> store.results.firstOrNull { it.id == id && it.examId == e.id } }
         if (rs.isNotEmpty()) Text("Hasil sesi ini", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 6.dp))
@@ -170,21 +172,20 @@ fun KoreksiScreen(st: AppState) {
 @Composable
 fun ResultCard(st: AppState, e: Exam, r: Res) {
     val s = score(e, r)
-    val thumb = remember(r.img) { loadThumb(File(st.store.imgDir, r.img))?.asImageBitmap() }
+    val crop = remember(r.img) { loadNameCrop(File(st.store.imgDir, r.img))?.asImageBitmap() }
     CardBox(Modifier.clickable { st.detailId = r.id }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (thumb != null) Image(thumb, null, Modifier.size(width = 56.dp, height = 80.dp).border(1.dp, Bd))
-            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text((if (r.absen != null) "Absen ${r.absen}" else "Absen ?") + e.namaSiswa(r.absen).let { if (it.isNotEmpty()) " · $it" else "" }, fontWeight = FontWeight.Bold)
-                Text("Paket ${r.paket ?: "?"} · B ${s.benar} · S ${s.salah} · K ${s.kosong}", color = Mut, fontSize = 13.sp)
+                if (r.nama.isNotBlank()) Text(r.nama, fontWeight = FontWeight.Bold)
+                else if (crop != null) Image(crop, "Tulisan nama di LJK", Modifier.size(width = 168.dp, height = 66.dp).border(1.dp, Bd))
+                Text("${r.kelas}${if (e.paket > 1) " · Paket ${r.paket}" else ""} · B ${s.benar} · S ${s.salah} · K ${s.kosong}", color = Mut, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (r.absen == null) Pill("absen?", "no")
-                    if (r.paket == null) Pill("paket?", "no")
+                    if (r.nama.isBlank()) Pill("nama belum diisi", "no")
                     if (s.ganda > 0) Pill("${s.ganda} ganda", "warn")
                     if (s.ragu > 0) Pill("${s.ragu} ragu", "warn")
                 }
             }
+            Spacer(Modifier.width(12.dp))
             Text(fmt(s.nilai), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
                 color = if (s.nilai == null) Mut else if (s.nilai >= e.kktp) Ok else No)
         }

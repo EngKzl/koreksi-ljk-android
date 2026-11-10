@@ -4,37 +4,37 @@ import kotlin.math.roundToInt
 
 val LETTERS = listOf("A", "B", "C", "D", "E")
 
+val TINGKAT = listOf("X", "XI", "XII")
+val JURUSAN = listOf("TSM", "TKR", "DKV", "MP", "AK", "BR")
+
 data class Exam(
     val id: String,
     val nama: String,
     val mapel: String,
-    val kelas: String,
-    val sekolah: String,
     val n: Int,
     val paket: Int,
     val kktp: Double,
     val kunci: Map<String, String>,
-    val siswa: List<String>,
     val created: Long,
 ) {
     fun key(p: String?): String = kunci[p ?: "A"] ?: ""
-    fun namaSiswa(absen: Int?): String = if (absen != null && absen >= 1 && absen <= siswa.size) siswa[absen - 1] else ""
     val paketLetters: List<String> get() = LETTERS.take(paket)
 }
 
 /** Jawaban terbaca mesin. c = pilihan, s = ok|ragu|ganda|kosong, m = tanda per opsi (. x t c), n = catatan */
 data class Ans(val c: String?, val s: String, val m: String, val n: String)
 
+/** Hasil satu LJK. kelas mis. "XI AK 2"; nama diisi guru (di LJK hanya tulisan tangan). */
 data class Res(
     val id: String,
     val examId: String,
-    val absen: Int?,
-    val paket: String?,
+    val kelas: String,
+    val nama: String,
+    val paket: String,
     val ans: List<Ans>,
     val ovr: Map<Int, String>,
     val img: String,
     val ts: Long,
-    val notes: List<String>,
 )
 
 data class Final(val ch: String?, val st: String, val ovr: Boolean)
@@ -80,19 +80,11 @@ fun fmt(v: Double?): String {
 fun normKey(s: String): String = s.uppercase().replace('?', '-').filter { it in "ABCDE-" }
 
 // ---------- Rekap ----------
-data class RekapRow(val absen: Int?, val nama: String, val r: Res?, val s: Score?)
+data class RekapRow(val r: Res, val s: Score)
 
-fun rekapRows(e: Exam, rs: List<Res>): List<RekapRow> {
-    val used = HashSet<String>()
-    val rows = ArrayList<RekapRow>()
-    e.siswa.forEachIndexed { i, nm ->
-        val r = rs.firstOrNull { it.absen == i + 1 }
-        if (r != null) used.add(r.id)
-        rows.add(RekapRow(i + 1, nm, r, r?.let { score(e, it) }))
-    }
-    rs.filter { it.id !in used }.forEach { rows.add(RekapRow(it.absen, e.namaSiswa(it.absen), it, score(e, it))) }
-    return rows.sortedBy { it.absen ?: 999 }
-}
+/** Baris rekap: yang sudah bernama urut abjad, yang belum bernama di akhir menurut urutan scan. */
+fun rekapRows(e: Exam, rs: List<Res>): List<RekapRow> =
+    rs.sortedWith(compareBy<Res>({ it.kelas }, { it.nama.isBlank() }, { it.nama.lowercase() }, { it.ts })).map { RekapRow(it, score(e, it)) }
 
 // ---------- Analisis butir ----------
 data class Item(
@@ -104,7 +96,7 @@ data class Item(
 data class Analysis(val N: Int, val items: List<Item>, val kr20: Double?, val mean: Double, val k: Int)
 
 fun analyze(e: Exam, all: List<Res>, p: String): Analysis {
-    val rs = all.filter { (it.paket ?: "A") == p }
+    val rs = all.filter { it.paket == p }
     val key = e.key(p)
     val n = rs.size
     val tot = rs.map { score(e, it).benar }

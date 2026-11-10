@@ -5,7 +5,7 @@ import net.pakeng.koreksiljk.omr.Omr
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Uji mesin OMR dengan foto LJK sintetis (miring, diputar, coretan, ganda). */
+/** Uji mesin OMR dengan foto sintetis LJK sekolah (miring, terbalik, silang, lingkaran, coretan, ganda). */
 class OmrTest {
     private fun load(name: String): Gray {
         // javax.imageio tidak ada di android.jar saat kompilasi, tapi tersedia di JVM saat uji
@@ -20,17 +20,15 @@ class OmrTest {
     }
 
     private fun check(seed: Int): Int {
-        val truth = javaClass.classLoader!!.getResourceAsStream("truth$seed.txt")!!.bufferedReader().readLines().filter { it.isNotBlank() }
-        val absen = truth[0].toInt(); val paket = truth[1]
-        val ans = truth.drop(2).map { val p = it.split(" "); Pair(if (p[0] == "-") null else p[0], p[1]) }
-        val r = Omr.readSheet(load("img$seed.jpg"), ans.size, 3)
+        val ans = javaClass.classLoader!!.getResourceAsStream("ljk$seed.txt")!!.bufferedReader().readLines().filter { it.isNotBlank() }
+            .map { val p = it.split(" "); Pair(if (p[0] == "-") null else p[0], p[1]) }
+        val r = Omr.readSheet(load("ljk$seed.jpg"), ans.size)
         assert(r.ok) { "seed $seed: ${r.error}" }
-        assertEquals("absen seed $seed", absen, r.absen)
-        assertEquals("paket seed $seed", paket, r.paket)
         var err = 0
         ans.forEachIndexed { i, (a, s) ->
             val g = r.answers[i]
-            if (g.choice != a || (s == "ganda") != (g.status == "ganda")) { err++; println("seed $seed q${i + 1}: $a/$s -> ${g.choice}/${g.status} ${g.marks}") }
+            val gs = if (g.status == "ragu") "ok" else g.status
+            if (g.choice != a || gs != s) { err++; println("seed $seed q${i + 1}: $a/$s -> ${g.choice}/${g.status} ${g.marks}") }
         }
         return err
     }
@@ -38,7 +36,7 @@ class OmrTest {
     @Test
     fun readsSyntheticSheets() {
         var total = 0
-        for (s in listOf(2, 3, 4, 13, 19)) total += check(s)
+        for (s in listOf(13, 15, 16)) total += check(s)
         assertEquals("salah baca", 0, total)
     }
 }

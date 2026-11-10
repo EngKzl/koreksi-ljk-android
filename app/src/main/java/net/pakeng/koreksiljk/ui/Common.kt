@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -22,6 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import net.pakeng.koreksiljk.data.JURUSAN
+import net.pakeng.koreksiljk.data.TINGKAT
+import net.pakeng.koreksiljk.omr.Layout
 import java.io.File
 
 val Pri = Color(0xFF0F5C4D)
@@ -73,11 +79,44 @@ fun share(ctx: Context, file: File, mime: String, title: String) {
 
 fun safeName(s: String) = s.replace(Regex("[^\\w\\- ]+"), "").trim().replace(Regex("\\s+"), "_").ifEmpty { "ujian" }
 
-fun loadThumb(file: File, maxW: Int = 160): Bitmap? {
-    if (!file.exists()) return null
-    val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeFile(file.path, o)
-    var s = 1
-    while (o.outWidth / (s * 2) >= maxW) s *= 2
-    return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = s })
+/** Potongan area tulisan tangan Nama/Kelas/Mapel dari gambar LJK yang sudah diluruskan. */
+fun loadNameCrop(file: File): Bitmap? {
+    val bmp = BitmapFactory.decodeFile(file.path) ?: return null
+    val k = bmp.width / Layout.W
+    val b = Layout.nameBox
+    val x = (b.x * k).toInt().coerceIn(0, bmp.width - 1); val y = (b.y * k).toInt().coerceIn(0, bmp.height - 1)
+    return Bitmap.createBitmap(bmp, x, y, (b.w * k).toInt().coerceAtMost(bmp.width - x), (b.h * k).toInt().coerceAtMost(bmp.height - y))
+}
+
+@Composable
+fun NeedExam(st: AppState) {
+    Column(Modifier.padding(12.dp)) {
+        CardBox {
+            Text("Belum ada ujian.", fontWeight = FontWeight.Bold)
+            Text("Buat ujian dulu di menu Ujian: isi mapel, jumlah soal, dan kunci jawaban.", color = Mut, fontSize = 13.sp)
+            Button(onClick = { st.page = "ujian"; st.editExamId = null; st.editing = true }, modifier = Modifier.padding(top = 8.dp)) { Text("＋ Buat ujian") }
+        }
+    }
+}
+
+/** Tombol pilihan (terisi bila dipilih). */
+@Composable
+fun Choice(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val pad = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+    if (selected) Button(onClick = onClick, contentPadding = pad, modifier = modifier) { Text(label, fontSize = 13.sp, maxLines = 1) }
+    else OutlinedButton(onClick = onClick, contentPadding = pad, modifier = modifier) { Text(label, fontSize = 13.sp, maxLines = 1) }
+}
+
+/** Pemilih kelas: tingkat, kompetensi keahlian, dan rombel. Nilai berbentuk "XI AK 2". */
+@Composable
+fun KelasPicker(value: String, onChange: (String) -> Unit) {
+    val p = value.split(" ")
+    val t = p.getOrNull(0)?.takeIf { it in TINGKAT } ?: TINGKAT[0]
+    val j = p.getOrNull(1)?.takeIf { it in JURUSAN } ?: JURUSAN[0]
+    val r = p.getOrNull(2)?.toIntOrNull() ?: 1
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { TINGKAT.forEach { x -> Choice(x, x == t, Modifier.weight(1f)) { onChange("$x $j $r") } } }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { JURUSAN.forEach { x -> Choice(x, x == j, Modifier.weight(1f)) { onChange("$t $x $r") } } }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { (1..6).forEach { x -> Choice("$x", x == r, Modifier.weight(1f)) { onChange("$t $j $x") } } }
+    }
 }

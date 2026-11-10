@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -54,7 +53,7 @@ import net.pakeng.koreksiljk.data.score
 import net.pakeng.koreksiljk.omr.Layout
 import java.io.File
 
-private val MARKNAME = mapOf('x' to "silang", 't' to "tanda lain", 'c' to "dicoret")
+private val MARKNAME = mapOf('x' to "tanda jawaban", 't' to "tanda lain", 'c' to "dicoret")
 
 @Composable
 fun DetailDialog(st: AppState, id: String) {
@@ -64,7 +63,7 @@ fun DetailDialog(st: AppState, id: String) {
     if (orig == null || e == null) { st.detailId = null; return }
     val scope = rememberCoroutineScope()
     var r by remember(id) { mutableStateOf(orig) }
-    var absenTxt by remember(id) { mutableStateOf(orig.absen?.toString() ?: "") }
+    var pickKelas by remember(id) { mutableStateOf(false) }
     var sel by remember(id) { mutableStateOf<Int?>(null) }
     var confirmDup by remember { mutableStateOf(false) }
     var confirmDel by remember { mutableStateOf(false) }
@@ -73,11 +72,12 @@ fun DetailDialog(st: AppState, id: String) {
     val key = e.key(r.paket)
     val close = { st.detailId = null }
 
+    // siswa lain dengan nama & kelas yang sama pada ujian ini
+    fun dupOf() = if (r.nama.isBlank()) null else store.resultsOf(e.id).firstOrNull { it.id != r.id && it.kelas == r.kelas && it.nama.equals(r.nama.trim(), true) }
+
     fun doSave() {
-        val dup = r.absen?.let { ab -> store.resultsOf(e.id).firstOrNull { it.absen == ab && it.id != r.id } }
-        if (dup != null) store.deleteResult(dup.id)
-        val notes = r.notes.filter { n -> !(r.absen != null && n.contains("absen", true)) && !(r.paket != null && n.contains("paket", true)) }
-        store.putResult(r.copy(notes = notes))
+        dupOf()?.let { store.deleteResult(it.id) }
+        store.putResult(r.copy(nama = r.nama.trim()))
         close()
         scope.launch { st.snack.showSnackbar("Tersimpan") }
     }
@@ -85,7 +85,7 @@ fun DetailDialog(st: AppState, id: String) {
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("LJK " + (r.absen?.let { "absen $it" } ?: "(absen belum terbaca)"), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Text(r.nama.ifBlank { "LJK (nama belum diisi)" }, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
                 TextButton(onClick = close) { Text("✕ Tutup") }
             }
             // Gambar LJK + penanda
@@ -96,7 +96,7 @@ fun DetailDialog(st: AppState, id: String) {
                         val x = off.x / size.width * 210; val y = off.y / size.height * 297
                         for (q in 0 until e.n) {
                             val b0 = Layout.ansBox(q, 0); val b4 = Layout.ansBox(q, 4)
-                            if (x >= b0.x - 10 && x <= b4.x + b4.w + 1 && y >= b0.y - 1 && y <= b0.y + b0.h + 1) { sel = q; break }
+                            if (x >= b0.x - 10 && x <= b4.x + b4.w + 1 && y >= b0.y && y < b0.y + b0.h) { sel = q; break }
                         }
                     }
                 }) {
@@ -127,23 +127,25 @@ fun DetailDialog(st: AppState, id: String) {
             }
             Text("■ hijau benar · ■ merah salah · □ hijau kunci · ■ oranye ganda/ragu — ketuk baris soal untuk mengubah", color = Mut, fontSize = 11.sp, modifier = Modifier.padding(vertical = 4.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(absenTxt, { v -> absenTxt = v.filter { it.isDigit() }.take(2); r = r.copy(absen = absenTxt.toIntOrNull()) },
-                    label = { Text("No. absen") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                if (e.paket > 1) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    e.paketLetters.forEach { p ->
-                        if (r.paket == p) Button(onClick = { }, contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp)) { Text(p) }
-                        else OutlinedButton(onClick = { r = r.copy(paket = p) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp)) { Text(p) }
-                    }
-                }
+            OutlinedTextField(r.nama, { r = r.copy(nama = it) }, label = { Text("Nama siswa (lihat tulisan di LJK)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            // saran: nama di kelas ini yang pernah diisi (ujian lain) dan belum dipakai pada ujian ini
+            val used = store.resultsOf(e.id).filter { it.id != r.id && it.kelas == r.kelas }.map { it.nama.lowercase() }.toSet()
+            val sug = store.results.filter { it.kelas == r.kelas && it.nama.isNotBlank() }.map { it.nama }.distinct()
+                .filter { it.lowercase() !in used && !it.equals(r.nama, true) && it.contains(r.nama.trim(), true) }.sorted().take(8)
+            if (sug.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                sug.forEach { nm -> OutlinedButton(onClick = { r = r.copy(nama = nm) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)) { Text(nm, fontSize = 12.sp) } }
             }
-            Text(e.namaSiswa(r.absen).ifEmpty { if (r.absen != null) "(nama tidak ada di daftar siswa)" else "Isi no. absen secara manual" }, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Kelas: ${r.kelas.ifBlank { "?" }}", fontWeight = FontWeight.Bold)
+                TextButton(onClick = { pickKelas = !pickKelas }) { Text(if (pickKelas) "Selesai" else "Ubah") }
+                if (e.paket > 1) e.paketLetters.forEach { p -> Choice(p, r.paket == p, Modifier.weight(1f)) { r = r.copy(paket = p) } }
+            }
+            if (pickKelas) KelasPicker(r.kelas) { r = r.copy(kelas = it) }
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(fmt(s.nilai), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = if (s.nilai != null && s.nilai >= e.kktp) Ok else No)
                 Spacer(Modifier.padding(4.dp))
                 Text("Benar ${s.benar} · Salah ${s.salah} · Kosong ${s.kosong}" + (if (s.ganda > 0) " · Ganda ${s.ganda}" else "") + (if (s.ragu > 0) " · Ragu ${s.ragu}" else ""), color = Mut, fontSize = 13.sp)
             }
-            if (r.notes.isNotEmpty()) Text(r.notes.joinToString("; "), color = No, fontSize = 13.sp)
             if (key.length < e.n) Text("Kunci paket ini belum lengkap.", color = No, fontSize = 13.sp)
 
             // Panel ubah jawaban
@@ -195,17 +197,14 @@ fun DetailDialog(st: AppState, id: String) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp, bottom = 30.dp)) {
-                Button(onClick = {
-                    val dup = r.absen?.let { ab -> store.resultsOf(e.id).firstOrNull { it.absen == ab && it.id != r.id } }
-                    if (dup != null) confirmDup = true else doSave()
-                }) { Text("Simpan") }
+                Button(onClick = { if (dupOf() != null) confirmDup = true else doSave() }) { Text("Simpan") }
                 TextButton(onClick = { confirmDel = true }) { Text("Hapus hasil", color = No) }
             }
         }
     }
     if (confirmDup) AlertDialog(onDismissRequest = { confirmDup = false },
-        title = { Text("No. absen sudah dipakai") },
-        text = { Text("Absen ${r.absen} sudah punya hasil lain. Timpa hasil lama?") },
+        title = { Text("Nama sudah ada") },
+        text = { Text("${r.nama.trim()} (${r.kelas}) sudah punya hasil pada ujian ini. Timpa hasil lama?") },
         confirmButton = { TextButton(onClick = { confirmDup = false; doSave() }) { Text("Timpa") } },
         dismissButton = { TextButton(onClick = { confirmDup = false }) { Text("Batal") } })
     if (confirmDel) AlertDialog(onDismissRequest = { confirmDel = false },

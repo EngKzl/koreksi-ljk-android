@@ -36,13 +36,13 @@ object Scanner {
     class Scan(val sheet: SheetResult, val ans: List<Ans>)
 
     /** Membaca LJK; bila berhasil menyimpan gambar lurus ke [imgFile]. */
-    fun scan(ctx: Context, uri: Uri, n: Int, paket: Int, th: Thresholds, imgFile: File): Scan {
+    fun scan(ctx: Context, uri: Uri, n: Int, th: Thresholds, imgFile: File): Scan {
         val bmp = loadBitmap(ctx, uri)
         val w = bmp.width; val h = bmp.height
         val px = IntArray(w * h)
         bmp.getPixels(px, 0, w, 0, 0, w, h)
         bmp.recycle()
-        val r = Omr.readSheet(Gray.fromArgb(w, h, px), n, paket, th)
+        val r = Omr.readSheet(Gray.fromArgb(w, h, px), n, th)
         if (!r.ok) return Scan(r, emptyList())
         val (ww, wh, wp) = Omr.warp(w, h, px, r.H!!, 3)
         val out = Bitmap.createBitmap(wp, ww, wh, Bitmap.Config.ARGB_8888)
